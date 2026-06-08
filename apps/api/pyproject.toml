@@ -18,6 +18,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "httpx>=0.28.0",
     "pgvector>=0.3.0",
+    "pydub>=0.25.1",
+    "numpy>=2.0.0",
 ]
 
 [project.optional-dependencies]

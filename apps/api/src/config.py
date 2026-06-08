@@ -27,9 +27,11 @@ class Settings(BaseSettings):
 
     # NVIDIA NIM
     nvidia_api_key: str = ""
-    nvidia_stt_model: str = "parakeet-rnnt-1.1b"
-    nvidia_diarization_model: str = "streusand-rnnt"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_stt_model: str = "nvidia/parakeet-ctc-1.1b"
+    nvidia_diarization_model: str = "nvidia/streusand-rnnt"
     nvidia_llm_model: str = "meta/llama-3.3-70b-instruct"
+    nvidia_timeout: int = 300  # 5 minutes per API call
 
     # App
     app_env: str = "development"
