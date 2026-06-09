@@ -72,6 +72,7 @@ export interface Salesperson {
   email: string | null;
   role: string | null;
   shift: string | null;
+  device_number: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,10 +83,12 @@ export interface CreateSalespersonRequest {
   email?: string;
   role?: string;
   shift?: string;
+  device_number?: string;
 }
 
 export interface SalespersonPerformance {
   salesperson_id: string;
+  name: string;
   total_conversations: number;
   avg_greeting_score: number | null;
   avg_discovery_score: number | null;
@@ -107,6 +110,7 @@ export interface Recording {
   status: RecordingStatus;
   error_message: string | null;
   uploaded_at: string;
+  recorded_at: string | null;
   processed_at: string | null;
 }
 

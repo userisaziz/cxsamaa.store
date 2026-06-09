@@ -31,6 +31,7 @@ async def create_salesperson(db: AsyncSession, data: SalespersonCreate) -> Sales
         email=data.email,
         role=data.role,
         shift=data.shift,
+        device_number=data.device_number,
     )
     db.add(salesperson)
     await db.flush()

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type { Recording } from "@samaa/shared";
 import { StatusBadge } from "@/components/status-badge";
@@ -58,7 +59,13 @@ function formatDate(dateStr: string): string {
 }
 
 export default function RecordingsPage() {
+  const searchParams = useSearchParams();
+  const initialSalespersonFilter = searchParams.get("salesperson_id") || "";
+
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [salespersonFilter] = useState(initialSalespersonFilter);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -69,9 +76,18 @@ export default function RecordingsPage() {
   if (statusFilter !== "ALL") {
     queryParams.set("status", statusFilter);
   }
+  if (salespersonFilter) {
+    queryParams.set("salesperson_id", salespersonFilter);
+  }
+  if (dateFrom) {
+    queryParams.set("date_from", dateFrom);
+  }
+  if (dateTo) {
+    queryParams.set("date_to", dateTo);
+  }
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["recordings", statusFilter, page],
+    queryKey: ["recordings", statusFilter, page, dateFrom, dateTo],
     queryFn: () =>
       api.get<{ items: Recording[]; total: number; page: number; total_pages: number }>(
         `/recordings?${queryParams.toString()}`,
@@ -93,8 +109,8 @@ export default function RecordingsPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Recordings</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Recordings</h1>
+          <p className="text-sm text-steel">
             {data?.total ?? 0} total recordings
           </p>
         </div>
@@ -118,7 +134,7 @@ export default function RecordingsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by status" />
@@ -131,6 +147,33 @@ export default function RecordingsPage() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">From:</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">To:</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setDateFrom(""); setDateTo(""); setPage(1); }}
+          >
+            Clear dates
+          </Button>
+        )}
       </div>
 
       {/* Recordings Table */}
@@ -151,7 +194,8 @@ export default function RecordingsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
+                    <TableHead>Recorded</TableHead>
+                    <TableHead>Uploaded</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Format</TableHead>
                     <TableHead>Size</TableHead>
@@ -162,6 +206,9 @@ export default function RecordingsPage() {
                 <TableBody>
                   {recordings.map((rec) => (
                     <TableRow key={rec.id}>
+                      <TableCell className="text-muted-foreground">
+                        {rec.recorded_at ? formatDate(rec.recorded_at) : "—"}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(rec.uploaded_at)}
                       </TableCell>
@@ -201,7 +248,7 @@ export default function RecordingsPage() {
                   ))}
                   {recordings.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         No recordings found
                       </TableCell>
                     </TableRow>

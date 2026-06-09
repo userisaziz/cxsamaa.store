@@ -16,18 +16,18 @@ export function KPICard({ title, value, description, icon: Icon, trend }: KPICar
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <CardTitle className="text-sm font-medium text-steel">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-steel" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-2xl font-semibold tracking-tight text-ink">{value}</div>
         {description && (
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-1 text-xs text-steel">{description}</p>
         )}
         {trend && (
           <p
-            className={`mt-1 text-xs ${
-              trend.isPositive ? "text-green-600" : "text-red-600"
+            className={`mt-1 text-xs font-medium ${
+              trend.isPositive ? "text-brand-green-deep" : "text-destructive"
             }`}
           >
             {trend.isPositive ? "+" : ""}

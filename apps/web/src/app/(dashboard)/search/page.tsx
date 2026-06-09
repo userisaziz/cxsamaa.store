@@ -27,8 +27,8 @@ interface SearchResult {
 }
 
 const OUTCOME_COLORS: Record<string, string> = {
-  SALE_MADE: "border-green-200 text-green-700 bg-green-50",
-  LOST: "border-red-200 text-red-700 bg-red-50",
+  SALE_MADE: "border-brand-green/30 text-brand-green-deep bg-brand-green-soft",
+  LOST: "border-destructive/20 text-destructive bg-destructive/10",
   FOLLOW_UP_NEEDED: "border-amber-200 text-amber-700 bg-amber-50",
 };
 
@@ -58,8 +58,8 @@ export default function SearchPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Semantic Search</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Semantic Search</h1>
+        <p className="text-sm text-steel">
           Search across all conversation transcripts using natural language
         </p>
       </div>

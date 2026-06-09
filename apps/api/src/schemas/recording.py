@@ -11,6 +11,7 @@ class RecordingResponse(BaseModel):
     status: str
     error_message: str | None = None
     uploaded_at: str
+    recorded_at: str | None = None
     processed_at: str | None = None
 
     model_config = {"from_attributes": True}

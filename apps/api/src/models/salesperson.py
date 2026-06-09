@@ -16,6 +16,7 @@ class Salesperson(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str | None] = mapped_column(String(100), nullable=True)
     shift: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    device_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

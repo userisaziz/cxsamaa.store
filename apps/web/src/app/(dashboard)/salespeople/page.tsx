@@ -24,8 +24,8 @@ export default function SalespeoplePage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Salespeople</h1>
-        <p className="text-muted-foreground">Manage sales team members</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Salespeople</h1>
+        <p className="text-sm text-steel">Manage sales team members</p>
       </div>
 
       <Card>
@@ -47,6 +47,7 @@ export default function SalespeoplePage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Shift</TableHead>
+                  <TableHead>Device #</TableHead>
                   <TableHead>Email</TableHead>
                 </TableRow>
               </TableHeader>
@@ -63,11 +64,12 @@ export default function SalespeoplePage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{sp.role || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{sp.shift || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.device_number || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{sp.email || "—"}</TableCell>
                   </TableRow>
                 )) ?? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
                       No salespeople found
                     </TableCell>
                   </TableRow>

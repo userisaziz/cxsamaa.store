@@ -25,7 +25,7 @@ export default function HomePage() {
         router.replace(`/store/${user.store_id}`);
         break;
       case "SALESPERSON":
-        router.replace(`/salesperson/${user.store_id}`);
+        router.replace("/recordings");
         break;
       default:
         router.replace("/recordings");

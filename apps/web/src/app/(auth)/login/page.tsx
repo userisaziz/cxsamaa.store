@@ -40,24 +40,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-            <Headphones className="h-6 w-6 text-primary-foreground" />
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 via-white to-white p-4">
+      <Card className="w-full max-w-md border-border shadow-sm">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-sm">
+            <Headphones className="h-7 w-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">SAMAA</CardTitle>
-          <CardDescription>Sales Audio Management & AI Analysis</CardDescription>
+          <CardTitle className="text-2xl font-semibold tracking-tight text-ink">SAMAA</CardTitle>
+          <CardDescription className="text-sm text-steel">Sales Audio Management & AI Analysis</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <CardContent className="pt-2">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
                 {error}
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium text-charcoal">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -69,7 +69,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium text-charcoal">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -79,7 +79,7 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>

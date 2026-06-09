@@ -24,8 +24,8 @@ export default function StoresPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Stores</h1>
-        <p className="text-muted-foreground">Manage retail locations</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Stores</h1>
+        <p className="text-sm text-steel">Manage retail locations</p>
       </div>
 
       <Card>

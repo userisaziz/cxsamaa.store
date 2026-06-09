@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from fastapi.responses import StreamingResponse
@@ -43,11 +44,32 @@ async def list_recordings_endpoint(
     page_size: int = 20,
     status: str | None = None,
     salesperson_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_salesperson_up),
 ):
+    parsed_date_from = None
+    parsed_date_to = None
+    if date_from:
+        try:
+            parsed_date_from = datetime.fromisoformat(date_from)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_from format. Use ISO 8601 (e.g. 2025-01-15)")
+    if date_to:
+        try:
+            parsed_date_to = datetime.fromisoformat(date_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_to format. Use ISO 8601 (e.g. 2025-01-15)")
+
     return await list_recordings(
-        db, page=page, page_size=page_size, status=status, salesperson_id=salesperson_id
+        db,
+        page=page,
+        page_size=page_size,
+        status=status,
+        salesperson_id=salesperson_id,
+        date_from=parsed_date_from,
+        date_to=parsed_date_to,
     )
 
 
@@ -89,6 +111,7 @@ async def export_conversations(
 async def upload_recording(
     file: UploadFile = File(...),
     salesperson_id: str = Form(...),
+    recorded_at: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_salesperson_up),
 ):
@@ -102,6 +125,17 @@ async def upload_recording(
             status_code=400,
             detail=f"Invalid format. Allowed: {', '.join(ALLOWED_FORMATS)}",
         )
+
+    # Parse recorded_at if provided
+    parsed_recorded_at = None
+    if recorded_at:
+        try:
+            parsed_recorded_at = datetime.fromisoformat(recorded_at)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid recorded_at format. Use ISO 8601 (e.g. 2025-01-15T10:30:00)",
+            )
 
     # Read file
     file_data = await file.read()
@@ -120,6 +154,7 @@ async def upload_recording(
         file_size=file_size,
         duration_seconds=None,  # Will be determined during preprocessing
         format=ext.upper(),
+        recorded_at=parsed_recorded_at,
     )
 
     # Enqueue Celery processing pipeline

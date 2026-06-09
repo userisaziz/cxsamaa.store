@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import type { Brand, Store as StoreType, SalespersonPerformance } from "@samaa/shared";
+import type { Brand, Store as StoreType, Salesperson, SalespersonPerformance } from "@samaa/shared";
 import { KPICard } from "@/components/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Store as StoreIcon, Users, Mic, TrendingUp, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
@@ -22,13 +23,61 @@ export default function BrandDashboardPage() {
     queryFn: () => api.get<StoreType[]>("/stores"),
   });
 
-  const storeCount = stores?.length ?? 0;
-
-  // Fetch salespeople to get total count
   const { data: salespeople } = useQuery({
-    queryKey: ["salespeople"],
-    queryFn: () => api.get<SalespersonPerformance[]>("/salespeople"),
+    queryKey: ["salespeople-all"],
+    queryFn: () => api.get<Salesperson[]>("/salespeople"),
   });
+
+  // Fetch performance for each salesperson to compute aggregates
+  const performanceQueries = useQuery({
+    queryKey: ["brand-performances", salespeople?.map((s) => s.id)],
+    queryFn: async () => {
+      if (!salespeople?.length) return new Map<string, SalespersonPerformance>();
+      const results = await Promise.all(
+        salespeople.map(async (sp) => {
+          try {
+            const perf = await api.get<SalespersonPerformance>(
+              `/salespeople/${sp.id}/performance`,
+            );
+            return [sp.id, perf] as const;
+          } catch {
+            return [sp.id, null] as const;
+          }
+        }),
+      );
+      return new Map(
+        results.filter(([, p]) => p !== null) as Iterable<[string, SalespersonPerformance]>,
+      );
+    },
+    enabled: !!salespeople?.length,
+  });
+
+  const performances = performanceQueries.data ?? new Map<string, SalespersonPerformance>();
+
+  // Compute brand-level aggregates
+  const perfValues = Array.from(performances.values());
+  const totalConversations = perfValues.reduce((sum, p) => sum + p.total_conversations, 0);
+  const avgBrandScore =
+    perfValues.length > 0
+      ? perfValues.reduce((sum, p) => sum + (p.avg_overall_score ?? 0), 0) / perfValues.length
+      : null;
+
+  // Group salespeople by store for the ranking table
+  function getStoreAggregates(storeId: string) {
+    const storeSalespeople = salespeople?.filter((sp) => sp.store_id === storeId) ?? [];
+    const storePerfs = storeSalespeople
+      .map((sp) => performances.get(sp.id))
+      .filter((p): p is SalespersonPerformance => p != null);
+
+    const count = storeSalespeople.length;
+    const conversations = storePerfs.reduce((sum, p) => sum + p.total_conversations, 0);
+    const avgScore =
+      storePerfs.length > 0
+        ? storePerfs.reduce((sum, p) => sum + (p.avg_overall_score ?? 0), 0) / storePerfs.length
+        : null;
+
+    return { count, conversations, avgScore };
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -41,7 +90,7 @@ export default function BrandDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Stores"
-          value={storeCount}
+          value={stores?.length ?? 0}
           icon={StoreIcon}
           description="Active retail locations"
         />
@@ -53,15 +102,15 @@ export default function BrandDashboardPage() {
         />
         <KPICard
           title="Conversations"
-          value="—"
+          value={totalConversations}
           icon={Mic}
-          description="Detected this week"
+          description="Total analyzed"
         />
         <KPICard
-          title="Avg Conversion"
-          value="—"
+          title="Avg Score"
+          value={avgBrandScore != null ? avgBrandScore.toFixed(1) : "—"}
           icon={TrendingUp}
-          description="Sales conversion rate"
+          description="Brand-wide average"
         />
       </div>
 
@@ -82,24 +131,47 @@ export default function BrandDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stores?.map((store: StoreType) => (
-                <TableRow key={store.id}>
-                  <TableCell>
-                    <Link
-                      href={`/store/${store.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {store.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {store.location || "—"}
-                  </TableCell>
-                  <TableCell className="text-right">—</TableCell>
-                  <TableCell className="text-right">—</TableCell>
-                  <TableCell className="text-right">—</TableCell>
-                </TableRow>
-              )) ?? (
+              {stores
+                ?.map((store: StoreType) => ({
+                  store,
+                  agg: getStoreAggregates(store.id),
+                }))
+                .sort((a, b) => (b.agg.avgScore ?? 0) - (a.agg.avgScore ?? 0))
+                .map(({ store, agg }) => (
+                  <TableRow key={store.id}>
+                    <TableCell>
+                      <Link
+                        href={`/store/${store.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {store.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {store.location || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">{agg.count}</TableCell>
+                    <TableCell className="text-right">
+                      {agg.avgScore != null ? (
+                        <Badge
+                          variant="outline"
+                          className={
+                            agg.avgScore >= 80
+                              ? "border-green-200 text-green-700 bg-green-50"
+                              : agg.avgScore >= 60
+                              ? "border-amber-200 text-amber-700 bg-amber-50"
+                              : "border-red-200 text-red-700 bg-red-50"
+                          }
+                        >
+                          {agg.avgScore.toFixed(0)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{agg.conversations}</TableCell>
+                  </TableRow>
+                )) ?? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
                     No stores found
@@ -120,9 +192,39 @@ export default function BrandDashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Coaching alerts will appear here when AI analysis identifies salespeople who need improvement.
-          </p>
+          {perfValues.length > 0 ? (
+            <div className="space-y-2">
+              {perfValues
+                .filter((p) => p.avg_overall_score != null && p.avg_overall_score < 60)
+                .sort((a, b) => (a.avg_overall_score ?? 100) - (b.avg_overall_score ?? 100))
+                .map((p) => (
+                  <div
+                    key={p.salesperson_id}
+                    className="flex items-center justify-between rounded-md border border-red-100 bg-red-50/50 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Score: {p.avg_overall_score?.toFixed(0)} · {p.total_conversations} conversations
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50">
+                      Needs Attention
+                    </Badge>
+                  </div>
+                ))}
+              {perfValues.filter((p) => p.avg_overall_score != null && p.avg_overall_score < 60)
+                .length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No salespeople currently need urgent coaching. Great job!
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Coaching alerts will appear here when AI analysis identifies salespeople who need improvement.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

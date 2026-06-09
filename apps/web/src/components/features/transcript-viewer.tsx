@@ -6,14 +6,14 @@ import { cn } from "@/lib/utils";
 
 const SPEAKER_COLORS: Record<string, string> = {
   SPEAKER_00: "text-blue-600",
-  SPEAKER_01: "text-emerald-600",
+  SPEAKER_01: "text-brand-green-deep",
   SPEAKER_02: "text-purple-600",
   SPEAKER_03: "text-amber-600",
-  UNKNOWN: "text-gray-500",
+  UNKNOWN: "text-stone",
 };
 
 function getSpeakerColor(label: string): string {
-  return SPEAKER_COLORS[label] || "text-gray-500";
+  return SPEAKER_COLORS[label] || "text-stone";
 }
 
 function formatTime(seconds: number): string {
@@ -49,7 +49,7 @@ export function TranscriptViewer({
 
   if (segments.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
+      <div className="flex items-center justify-center py-12 text-steel">
         No transcript available
       </div>
     );
@@ -68,7 +68,7 @@ export function TranscriptViewer({
             )}
             onClick={() => onSegmentClick?.(seg)}
           >
-            <span className="shrink-0 font-mono text-xs text-muted-foreground pt-0.5">
+            <span className="shrink-0 font-mono text-xs text-steel pt-0.5">
               {formatTime(seg.start_time)}
             </span>
             <span

@@ -4,9 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
-import type { Store, Salesperson, Recording } from "@samaa/shared";
+import type { Store, Salesperson, SalespersonPerformance } from "@samaa/shared";
 import { KPICard } from "@/components/kpi-card";
-import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -16,6 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Users, Mic, TrendingUp, AlertTriangle } from "lucide-react";
 
 export default function StoreDashboardPage() {
@@ -34,27 +35,71 @@ export default function StoreDashboardPage() {
     enabled: !!storeId,
   });
 
+  // Fetch performance for each salesperson
+  const performanceQueries = useQuery({
+    queryKey: ["store-performances", storeId, salespeople?.map((s) => s.id)],
+    queryFn: async () => {
+      if (!salespeople?.length) return new Map<string, SalespersonPerformance>();
+      const results = await Promise.all(
+        salespeople.map(async (sp) => {
+          try {
+            const perf = await api.get<SalespersonPerformance>(
+              `/salespeople/${sp.id}/performance`,
+            );
+            return [sp.id, perf] as const;
+          } catch {
+            return [sp.id, null] as const;
+          }
+        }),
+      );
+      return new Map(
+        results.filter(([, p]) => p !== null) as Iterable<[string, SalespersonPerformance]>,
+      );
+    },
+    enabled: !!salespeople?.length,
+  });
+
+  const performances = performanceQueries.data ?? new Map<string, SalespersonPerformance>();
+
+  // Compute store-level aggregates
+  const perfValues = Array.from(performances.values());
+  const avgStoreScore =
+    perfValues.length > 0
+      ? perfValues.reduce((sum, p) => sum + (p.avg_overall_score ?? 0), 0) / perfValues.length
+      : null;
+  const totalConversations = perfValues.reduce((sum, p) => sum + p.total_conversations, 0);
+
+  // Find top objection from all salespeople (placeholder until aggregated endpoint exists)
+  const topObjection = "—";
+
   return (
     <div className="space-y-6 p-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs
+        items={[
+          { label: store?.name || "Store" },
+        ]}
+      />
+
       {/* Store Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{store?.name || "Store"}</h1>
-        <p className="text-muted-foreground">{store?.location || ""}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">{store?.name || "Store"}</h1>
+        <p className="text-sm text-steel">{store?.location || ""}</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Performance Score"
-          value="—"
+          value={avgStoreScore != null ? avgStoreScore.toFixed(1) : "—"}
           icon={TrendingUp}
           description="Average across salespeople"
         />
         <KPICard
           title="Conversations"
-          value="—"
+          value={totalConversations}
           icon={Mic}
-          description="This week"
+          description="Total analyzed"
         />
         <KPICard
           title="Salespeople"
@@ -64,9 +109,9 @@ export default function StoreDashboardPage() {
         />
         <KPICard
           title="Top Objection"
-          value="—"
+          value={topObjection}
           icon={AlertTriangle}
-          description="Most common this week"
+          description="Most common"
         />
       </div>
 
@@ -87,22 +132,44 @@ export default function StoreDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {salespeople?.map((sp) => (
-                <TableRow key={sp.id}>
-                  <TableCell>
-                    <Link
-                      href={`/salesperson/${sp.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {sp.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{sp.role || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{sp.shift || "—"}</TableCell>
-                  <TableCell className="text-right">—</TableCell>
-                  <TableCell className="text-right">—</TableCell>
-                </TableRow>
-              )) ?? (
+              {salespeople?.map((sp) => {
+                const perf = performances.get(sp.id);
+                return (
+                  <TableRow key={sp.id}>
+                    <TableCell>
+                      <Link
+                        href={`/salesperson/${sp.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {sp.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{sp.role || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.shift || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {perf?.avg_overall_score != null ? (
+                        <Badge
+                          variant="outline"
+                          className={
+                            perf.avg_overall_score >= 80
+                              ? "border-green-200 text-green-700 bg-green-50"
+                              : perf.avg_overall_score >= 60
+                              ? "border-amber-200 text-amber-700 bg-amber-50"
+                              : "border-red-200 text-red-700 bg-red-50"
+                          }
+                        >
+                          {perf.avg_overall_score.toFixed(0)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {perf?.total_conversations ?? 0}
+                    </TableCell>
+                  </TableRow>
+                );
+              }) ?? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
                     No salespeople found

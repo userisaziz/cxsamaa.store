@@ -9,6 +9,8 @@ import type {
   Conversation,
   ConversationAnalysis,
   RecordingSummaryResponse,
+  Salesperson,
+  Store,
 } from "@samaa/shared";
 import { api } from "@/lib/api-client";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,6 +19,7 @@ import { TranscriptViewer } from "@/components/features/transcript-viewer";
 import { ConversationTimeline } from "@/components/features/conversation-timeline";
 import { AIInsightsPanel } from "@/components/features/ai-insights-panel";
 import { ConversationDrawer } from "@/components/features/conversation-drawer";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mic, MessageSquare, Target, AlertTriangle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -96,6 +99,20 @@ export default function RecordingDetailPage() {
 
   const analyses = analysisQueries.data ?? new Map<string, ConversationAnalysis>();
 
+  // Fetch salesperson info for breadcrumb
+  const { data: salesperson } = useQuery({
+    queryKey: ["salesperson-for-recording", recording?.salesperson_id],
+    queryFn: () => api.get<Salesperson>(`/salespeople/${recording?.salesperson_id}`),
+    enabled: !!recording?.salesperson_id,
+  });
+
+  // Fetch store info for breadcrumb
+  const { data: store } = useQuery({
+    queryKey: ["store-for-recording", salesperson?.store_id],
+    queryFn: () => api.get<Store>(`/stores/${salesperson?.store_id}`),
+    enabled: !!salesperson?.store_id,
+  });
+
   function handleConversationClick(conv: Conversation) {
     setActiveConversationId((prev) => (prev === conv.id ? null : conv.id));
   }
@@ -107,9 +124,18 @@ export default function RecordingDetailPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs
+        items={[
+          { label: store?.name || "Store", href: store ? `/store/${store.id}` : undefined },
+          { label: salesperson?.name || "Salesperson", href: salesperson ? `/salesperson/${salesperson.id}` : undefined },
+          { label: recording ? new Date(recording.uploaded_at).toLocaleDateString() : "Recording" },
+        ]}
+      />
+
       {/* Back button + Header */}
       <div className="flex items-center gap-4">
-        <Link href="/recordings">
+        <Link href={salesperson ? `/salesperson/${salesperson.id}` : "/recordings"}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-1 h-4 w-4" />
             Back
@@ -117,10 +143,10 @@ export default function RecordingDetailPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">Recording Detail</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">Recording Detail</h1>
             {recording && <StatusBadge status={recording.status} />}
           </div>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-steel">
             {recording && (
               <>
                 {formatDuration(recording.duration_seconds)} · {recording.format}

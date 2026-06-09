@@ -1,6 +1,7 @@
 import math
 import uuid
 from collections import Counter
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,8 @@ async def list_recordings(
     page_size: int = 20,
     status: str | None = None,
     salesperson_id: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> dict:
     """List recordings with pagination and optional filters."""
     query = select(Recording)
@@ -29,6 +32,12 @@ async def list_recordings(
     if salesperson_id:
         query = query.where(Recording.salesperson_id == uuid.UUID(salesperson_id))
         count_query = count_query.where(Recording.salesperson_id == uuid.UUID(salesperson_id))
+    if date_from:
+        query = query.where(Recording.recorded_at >= date_from)
+        count_query = count_query.where(Recording.recorded_at >= date_from)
+    if date_to:
+        query = query.where(Recording.recorded_at <= date_to)
+        count_query = count_query.where(Recording.recorded_at <= date_to)
 
     # Total count
     total_result = await db.execute(count_query)
@@ -64,6 +73,7 @@ async def create_recording(
     file_size: int,
     duration_seconds: int | None,
     format: str,
+    recorded_at: datetime | None = None,
 ) -> Recording:
     recording = Recording(
         salesperson_id=uuid.UUID(salesperson_id),
@@ -72,6 +82,7 @@ async def create_recording(
         duration_seconds=duration_seconds,
         format=format,
         status=RecordingStatus.UPLOADED,
+        recorded_at=recorded_at,
     )
     db.add(recording)
     await db.flush()

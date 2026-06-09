@@ -7,6 +7,7 @@ class SalespersonCreate(BaseModel):
     email: str | None = None
     role: str | None = None
     shift: str | None = None
+    device_number: str | None = None
 
 
 class SalespersonUpdate(BaseModel):
@@ -14,6 +15,7 @@ class SalespersonUpdate(BaseModel):
     email: str | None = None
     role: str | None = None
     shift: str | None = None
+    device_number: str | None = None
 
 
 class SalespersonResponse(BaseModel):
@@ -23,6 +25,7 @@ class SalespersonResponse(BaseModel):
     email: str | None = None
     role: str | None = None
     shift: str | None = None
+    device_number: str | None = None
     created_at: str
     updated_at: str
 

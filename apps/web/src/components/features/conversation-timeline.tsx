@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const OUTCOME_COLORS: Record<string, string> = {
-  SALE_MADE: "bg-green-500",
+  SALE_MADE: "bg-brand-green",
   LOST: "bg-red-400",
   FOLLOW_UP_NEEDED: "bg-amber-400",
 };
@@ -59,7 +59,7 @@ export function ConversationTimeline({
                   className={cn(
                     "absolute top-1 h-8 rounded-sm transition-all cursor-pointer",
                     barColor,
-                    isActive ? "ring-2 ring-primary ring-offset-1 opacity-100" : "opacity-70 hover:opacity-100",
+                    isActive ? "ring-2 ring-brand-green ring-offset-1 opacity-100" : "opacity-70",
                   )}
                   style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
                   onClick={() => onConversationClick?.(conv)}

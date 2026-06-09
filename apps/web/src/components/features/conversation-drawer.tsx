@@ -24,8 +24,8 @@ const SPEAKER_COLORS: Record<string, string> = {
 };
 
 const OUTCOME_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
-  SALE_MADE: { label: "Sale Made", icon: CheckCircle, className: "text-green-600" },
-  LOST: { label: "Lost", icon: XCircle, className: "text-red-600" },
+  SALE_MADE: { label: "Sale Made", icon: CheckCircle, className: "text-brand-green-deep" },
+  LOST: { label: "Lost", icon: XCircle, className: "text-destructive" },
   FOLLOW_UP_NEEDED: { label: "Follow-up Needed", icon: Clock, className: "text-amber-600" },
 };
 
@@ -103,7 +103,7 @@ export function ConversationDrawer({ conversation, open, onOpenChange }: Convers
                   </div>
                 )}
                 {analysis?.closing_attempt && (
-                  <Badge variant="outline" className="text-xs border-green-200 text-green-700">
+                  <Badge variant="outline" className="text-xs border-brand-green/30 text-brand-green-deep">
                     Closing Attempted
                   </Badge>
                 )}
@@ -148,7 +148,7 @@ export function ConversationDrawer({ conversation, open, onOpenChange }: Convers
 
               {/* Coaching Notes */}
               {analysis?.coaching_notes && (
-                <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3">
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 border border-amber-100">
                   <Brain className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-amber-800">{analysis.coaching_notes}</p>
                 </div>

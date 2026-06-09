@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 
 const OUTCOME_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
-  SALE_MADE: { label: "Sale Made", icon: CheckCircle, className: "text-green-600" },
-  LOST: { label: "Lost", icon: XCircle, className: "text-red-600" },
+  SALE_MADE: { label: "Sale Made", icon: CheckCircle, className: "text-brand-green-deep" },
+  LOST: { label: "Lost", icon: XCircle, className: "text-destructive" },
   FOLLOW_UP_NEEDED: { label: "Follow-up Needed", icon: Clock, className: "text-amber-600" },
 };
 
@@ -42,7 +42,7 @@ export function AIInsightsPanel({
 }: AIInsightsPanelProps) {
   if (conversations.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
+      <div className="flex items-center justify-center py-12 text-steel text-sm">
         No AI analysis available yet
       </div>
     );
@@ -59,8 +59,8 @@ export function AIInsightsPanel({
         return (
           <Card
             key={conv.id}
-            className={`cursor-pointer transition-all hover:shadow-md ${
-              isActive ? "ring-2 ring-primary" : ""
+            className={`cursor-pointer transition-all ${
+              isActive ? "ring-2 ring-brand-green" : ""
             }`}
             onClick={() => onConversationClick?.(conv)}
           >
@@ -145,7 +145,7 @@ export function AIInsightsPanel({
                   <div className="flex items-center gap-1.5">
                     <CheckCircle
                       className={`h-3.5 w-3.5 ${
-                        analysis.closing_attempt ? "text-green-500" : "text-muted-foreground"
+                        analysis.closing_attempt ? "text-brand-green-deep" : "text-steel"
                       }`}
                     />
                     <span className="text-xs">
@@ -165,7 +165,7 @@ export function AIInsightsPanel({
 
                   {/* Coaching Notes */}
                   {analysis.coaching_notes && (
-                    <div className="flex items-start gap-1.5 rounded-md bg-amber-50 p-2">
+                    <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 border border-amber-100">
                       <Brain className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-800">{analysis.coaching_notes}</p>
                     </div>
