@@ -1,0 +1,1 @@
+Provides interfaces for reviewing audio recordings, visualizing conversation timelines, and accessing AI-driven coaching insights for sales performance.

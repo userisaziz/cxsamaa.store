@@ -1,0 +1,4 @@
+- Uses Next.js App Router with route groups ((auth), (dashboard), (operations)) to enforce layout isolation and access control boundaries.
+- Centralizes client-side session management via a shared API client (`lib/api-client.ts`) that handles JWT refresh and automatic redirection on auth failure, consumed by all feature modules.
+- Wraps the application in a root `Providers` component to inject global context (e.g., theme, auth state) across all child layouts and pages.
+- Delegates route-level protection to a client-side `AuthGuard` component rather than server-side middleware, relying on localStorage for token persistence.

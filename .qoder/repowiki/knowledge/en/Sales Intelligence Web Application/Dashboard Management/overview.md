@@ -1,0 +1,1 @@
+Provides hierarchical dashboard views for brands, stores, and salespeople with performance analytics and semantic search capabilities.

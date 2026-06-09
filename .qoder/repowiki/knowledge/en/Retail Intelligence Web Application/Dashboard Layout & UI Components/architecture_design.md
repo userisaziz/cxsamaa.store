@@ -1,4 +1,0 @@
-- Entry point: `apps/web/src/app/(dashboard)/layout.tsx` wraps children in `AuthGuard` and composes `Sidebar` with a scrollable main area.
-- Navigation layer: `components/layout/sidebar.tsx` and `components/layout/operations-sidebar.tsx` implement role-filtered nav items, active-route highlighting, and user/logout controls using `useAuthStore` and Next.js navigation hooks.
-- Presentation components: `kpi-card.tsx`, `status-badge.tsx`, and `loading-skeleton.tsx` are standalone, reusable UI pieces that rely on shared `ui/*` primitives (Card, Badge, Skeleton) and design tokens.
-- Dependency direction: layout depends on sidebar; sidebars depend on auth store and UI primitives; presentation components depend only on UI primitives and shared types (`RecordingStatus`).

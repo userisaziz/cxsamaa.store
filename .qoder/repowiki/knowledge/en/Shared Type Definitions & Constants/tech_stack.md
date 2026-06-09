@@ -1,1 +1,0 @@
-TypeScript ^5.7.0 for type-only compilation; no runtime framework or external libraries.

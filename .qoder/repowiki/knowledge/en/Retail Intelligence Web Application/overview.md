@@ -1,1 +1,0 @@
-Orchestrates a Next.js-based retail intelligence dashboard by unifying authentication, shared UI infrastructure, and role-specific operational views into a cohesive client-side experience.

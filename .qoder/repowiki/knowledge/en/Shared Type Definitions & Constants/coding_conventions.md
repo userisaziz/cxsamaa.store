@@ -1,4 +1,0 @@
-- Request DTOs use PascalCase interfaces suffixed with 'Request' (e.g., LoginRequest, CreateBrandRequest).
-- Response DTOs use PascalCase interfaces suffixed with 'Response' (e.g., TokenResponse, UserResponse, PaginatedResponse<T>).
-- Domain entity interfaces use bare PascalCase names without suffixes (e.g., Brand, Store, Recording, Conversation).
-- Constants are defined as readonly objects with `as const` assertion, then derived into union types via indexed access.

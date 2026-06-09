@@ -1,1 +1,0 @@
-Next.js App Router with Client Components, TanStack Query for server-state synchronization, Recharts for data visualization, and Lucide React for iconography.

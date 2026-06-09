@@ -1,0 +1,4 @@
+- Entry point: `apps/web/src/app/(dashboard)/layout.tsx` defines a client-side layout wrapping content in an `AuthGuard`, a desktop `Sidebar`, and a `MobileSidebar` drawer.
+- Navigation layer: `components/layout/sidebar.tsx` implements role-based filtering of navigation items using `useAuthStore`, while `components/layout/mobile-sidebar.tsx` handles responsive visibility and drawer state via Next.js `Sheet`.
+- Presentational components: `kpi-card.tsx`, `status-badge.tsx`, and `loading-skeleton.tsx` are atomic UI elements built on top of shadcn/ui primitives (`Card`, `Badge`, `Skeleton`) and `lucide-react` icons.
+- Dependency direction: Layout components depend on global auth state (`@/store/auth`) and UI primitives, while presentational components remain stateless and rely only on props and utility classes.

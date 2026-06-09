@@ -1,4 +1,0 @@
-- Uses 'use client' directive in all page components to enable client-side hooks and interactivity.
-- Standardizes on `@tanstack/react-query` useQuery hook for all data fetching operations with consistent query key structures.
-- Implements conditional rendering for loading states using Skeleton components or empty state placeholders with 'Inbox' icons.
-- Applies consistent typography classes such as 'text-[28px] font-semibold tracking-tight' for page headers across all views.

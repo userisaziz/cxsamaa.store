@@ -1,1 +1,0 @@
-Provides role-based dashboards for brand, store, and salesperson performance monitoring with semantic search capabilities.

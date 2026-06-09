@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: shared_package
+title: Shared Type Definitions and Constants
+scope:
+    - packages/shared/
+source_files: []
+depends_on: []
+related_to:
+    - path: api_service
+    - path: web_app/dashboard_management
+    - path: web_app/dashboard_conversations
+    - path: web_app/dashboard_layout
+    - path: web_app/auth
+    - path: web_app/app_shell
+    - path: web_app/shared_ui_lib

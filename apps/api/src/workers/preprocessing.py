@@ -127,16 +127,31 @@ def preprocess_audio(self, recording_id: str) -> str:
 
         # Process audio in a temp directory
         with tempfile.TemporaryDirectory() as tmpdir:
-            input_path = os.path.join(tmpdir, "input.audio")
+            # Preserve original extension so ffmpeg can detect format
+            ext = os.path.splitext(file_url)[1] or ".mp3"
+            input_path = os.path.join(tmpdir, f"input{ext}")
             output_path = os.path.join(tmpdir, "preprocessed.wav")
 
             # Write downloaded audio to temp file
             with open(input_path, "wb") as f:
                 f.write(audio_data)
 
-            # Load audio with pydub
-            logger.info(f"[{recording_id}] Loading audio file")
-            audio = AudioSegment.from_file(input_path)
+            # Convert to WAV via ffmpeg subprocess (avoids pydub subprocess hang in Celery)
+            logger.info(f"[{recording_id}] Converting audio to WAV via ffmpeg")
+            import subprocess
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", input_path, "-ac", "1", "-ar", str(TARGET_SAMPLE_RATE), "-f", "wav", output_path],
+                capture_output=True,
+                timeout=300,
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg conversion failed: {result.stderr.decode()}")
+
+            # Load preprocessed WAV
+            logger.info(f"[{recording_id}] Loading preprocessed WAV")
+            audio = AudioSegment.from_wav(output_path)
 
             # Convert to mono
             logger.info(f"[{recording_id}] Converting to mono (channels: {audio.channels})")
@@ -152,22 +167,6 @@ def preprocess_audio(self, recording_id: str) -> str:
             logger.info(f"[{recording_id}] Normalizing volume (current: {audio.dBFS:.1f} dBFS)")
             change_in_dbfs = -20.0 - audio.dBFS
             audio = audio.apply_gain(change_in_dbfs)
-
-            # Detect silence gaps > 30 seconds (informational — used by segmentation)
-            silence_ranges = silence.detect_silence(
-                audio,
-                min_silence_len=SILENCE_GAP_MS,
-                silence_thresh=SILENCE_THRESHOLD_DB,
-            )
-            if silence_ranges:
-                logger.info(
-                    f"[{recording_id}] Found {len(silence_ranges)} silence gaps > {SILENCE_GAP_MS / 1000}s"
-                )
-                for i, (start, end) in enumerate(silence_ranges):
-                    logger.debug(f"  Gap {i+1}: {start/1000:.1f}s - {end/1000:.1f}s")
-
-                # Store silence gaps in DB for segmentation
-                _store_silence_gaps_sync(recording_id, silence_ranges)
 
             # Export preprocessed audio
             logger.info(f"[{recording_id}] Exporting preprocessed audio")
@@ -195,11 +194,5 @@ def preprocess_audio(self, recording_id: str) -> str:
     except Exception as exc:
         logger.error(f"[{recording_id}] Preprocessing failed: {exc}")
         if self.request.retries >= self.max_retries:
-
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
-        logger.error(f"[{recording_id}] Preprocessing failed: {exc}")
-        if self.request.retries >= self.max_retries:
-
             _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
         raise self.retry(exc=exc)

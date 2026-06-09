@@ -1,0 +1,159 @@
+"use client";
+
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import WaveSurfer from "wavesurfer.js";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+export interface WaveformPlayerHandle {
+  seekTo: (seconds: number) => void;
+}
+
+interface WaveformPlayerProps {
+  recordingId: string;
+  onTimeUpdate?: (currentTime: number) => void;
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerProps>(
+  function WaveformPlayer({ recordingId, onTimeUpdate }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const wavesurferRef = useRef<WaveSurfer | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [isReady, setIsReady] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Expose seekTo via ref
+    useImperativeHandle(ref, () => ({
+      seekTo: (seconds: number) => {
+        if (wavesurferRef.current && duration > 0) {
+          wavesurferRef.current.seekTo(seconds / duration);
+        }
+      },
+    }));
+
+    // Initialize wavesurfer
+    useEffect(() => {
+      if (!containerRef.current) return;
+
+      const ws = WaveSurfer.create({
+        container: containerRef.current,
+        waveColor: "#d1d5db",
+        progressColor: "#00d4a4",
+        cursorColor: "#1a1a1a",
+        cursorWidth: 1,
+        barWidth: 2,
+        barGap: 1.5,
+        barRadius: 2,
+        height: 80,
+        normalize: true,
+        backend: "WebAudio",
+      });
+
+      wavesurferRef.current = ws;
+
+      ws.on("ready", () => {
+        setIsReady(true);
+        setDuration(ws.getDuration());
+        setError(null);
+      });
+
+      ws.on("error", (err) => {
+        console.error("WaveSurfer error:", err);
+        setError("Failed to load audio");
+        setIsReady(false);
+      });
+
+      ws.on("play", () => setIsPlaying(true));
+      ws.on("pause", () => setIsPlaying(false));
+      ws.on("finish", () => setIsPlaying(false));
+
+      ws.on("timeupdate", (time: number) => {
+        setCurrentTime(time);
+        onTimeUpdate?.(time);
+      });
+
+      // Fetch audio with auth header, then load as blob
+      const token = localStorage.getItem("access_token");
+      fetch(`${API_URL}/recordings/${recordingId}/audio`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch audio");
+          return res.blob();
+        })
+        .then((blob) => ws.loadBlob(blob))
+        .catch(() => setError("Failed to load audio"));
+
+      return () => {
+        ws.destroy();
+        wavesurferRef.current = null;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recordingId]);
+
+    const togglePlayPause = useCallback(() => {
+      wavesurferRef.current?.playPause();
+    }, []);
+
+    if (error) {
+      return (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-steel">
+          <svg className="h-4 w-4 shrink-0 text-brand-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          {error}
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-4">
+          {/* Play / Pause button */}
+          <button
+            onClick={togglePlayPause}
+            disabled={!isReady}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+            ) : (
+              <svg className="ml-0.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="6,3 20,12 6,21" />
+              </svg>
+            )}
+          </button>
+
+          {/* Waveform container */}
+          <div ref={containerRef} className="flex-1 min-w-0" />
+
+          {/* Time display */}
+          <div className="shrink-0 text-xs font-mono text-steel tabular-nums">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+      </div>
+    );
+  },
+);

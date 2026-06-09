@@ -1,3 +1,0 @@
-- All feature pages use Next.js App Router `page.tsx` convention within route groups for layout isolation.
-- Shared UI components are strictly separated into `components/ui` for primitives and `components/features` for domain-specific composites.
-- Global state management for auth is isolated in `src/store` using Zustand, decoupled from UI components.

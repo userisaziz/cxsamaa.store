@@ -53,7 +53,7 @@ async def list_recordings(
     items = list(result.scalars().all())
 
     return {
-        "items": items,
+        "items": [RecordingResponse.model_validate(item) for item in items],
         "total": total,
         "page": page,
         "page_size": page_size,

@@ -1,0 +1,1 @@
+TypeScript ^5.7.0 for static typing and interface definitions.

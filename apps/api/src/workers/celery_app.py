@@ -1,6 +1,14 @@
 from celery import Celery
+from sqlalchemy.orm import registry
 
 from src.config import settings
+
+# Import all models to register them with the mapper registry
+from src.models import brand, conversation, recording, salesperson, store, transcript, user, metrics
+
+# Configure relationships between all mapped models
+mapper_registry = registry()
+mapper_registry.configure()
 
 celery_app = Celery(
     "samaa",

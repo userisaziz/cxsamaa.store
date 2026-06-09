@@ -1,0 +1,19 @@
+schema_version: 1
+module_path: ""
+title: SAMAI Sales Intelligence Platform
+scope:
+    - .env
+    - .env.example
+    - .gitignore
+    - DESIGN.md
+    - PRODUCT.md
+    - README.md
+    - docker-compose.yml
+    - package-lock.json
+    - package.json
+    - seed.sh
+    - start_servers.sh
+    - turbo.json
+source_files: []
+depends_on: []
+related_to: []

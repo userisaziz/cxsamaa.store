@@ -1,3 +1,0 @@
-- Uses a Turborepo monorepo structure to manage build dependencies and task execution across the web application and shared packages.
-- Relies on a root-level `start_servers.sh` script to coordinate the lifecycle of heterogeneous services: Docker-managed infrastructure (PostgreSQL/Redis), a Python FastAPI/Celery backend, and the Next.js frontend.
-- Enforces type safety and API consistency through a `shared_package` that provides centralized TypeScript interfaces consumed by the web client and referenced by the API service.

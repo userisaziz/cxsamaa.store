@@ -1,1 +1,1 @@
-Provides REST endpoints for managing sales audio recordings and orchestrates asynchronous AI-driven analysis pipelines including transcription, diarization, and performance scoring.
+Provides REST endpoints for managing sales audio recordings, orchestrating AI-driven transcription and analysis pipelines, and exposing conversation insights.

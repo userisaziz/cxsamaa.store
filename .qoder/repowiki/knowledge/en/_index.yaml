@@ -2,11 +2,11 @@
 schema_version: 1
 locale: en-US
 branch: main
-exported_at: "2026-06-09T21:18:58Z"
+exported_at: "2026-06-09T22:19:30Z"
 modules:
     "":
-        dir_name: SAMAA Retail Intelligence Platform
-        title: SAMAA Retail Intelligence Platform
+        dir_name: SAMAI Sales Intelligence Platform
+        title: SAMAI Sales Intelligence Platform
         scope:
             - .env
             - .env.example
@@ -41,8 +41,8 @@ modules:
             - path: web_app/app_shell
             - path: web_app/shared_ui_lib
     shared_package:
-        dir_name: Shared Type Definitions & Constants
-        title: Shared Type Definitions & Constants
+        dir_name: Shared Type Definitions and Constants
+        title: Shared Type Definitions and Constants
         scope:
             - packages/shared/
         source_files: []
@@ -57,17 +57,17 @@ modules:
             - path: web_app/app_shell
             - path: web_app/shared_ui_lib
     web_app:
-        dir_name: Retail Intelligence Web Application
-        title: Retail Intelligence Web Application
+        dir_name: Sales Intelligence Web Application
+        title: Sales Intelligence Web Application
         scope:
             - apps/web/
         source_files: []
         children:
-            - web_app/dashboard_layout
             - web_app/app_shell
             - web_app/auth
             - web_app/dashboard_conversations
             - web_app/dashboard_management
+            - web_app/dashboard_layout
             - web_app/shared_ui_lib
         depends_on: []
         related_to: []

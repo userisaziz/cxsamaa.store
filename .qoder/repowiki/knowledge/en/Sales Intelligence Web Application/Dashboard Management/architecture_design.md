@@ -1,0 +1,4 @@
+- Hierarchical routing structure using Next.js App Router groups `(dashboard)` with dynamic segments `[id]` for detail views (e.g., `store/[id]`, `salesperson/[id]`).
+- Client-side data fetching pattern using `@tanstack/react-query` hooks (`useQuery`) interacting with a centralized `api` client (`@/lib/api-client`).
+- Shared type definitions imported from `@samaa/shared` package ensure consistency across dashboard components.
+- Composition of specialized chart components (e.g., `OutcomeDonut`, `SkillHeatmap`) and UI primitives (e.g., `KPICard`, `Table`) to build complex analytical views.

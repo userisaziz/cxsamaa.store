@@ -1,1 +1,0 @@
-Manages user authentication state, session persistence via local storage, and route-level access control for the web application.

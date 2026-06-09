@@ -66,10 +66,18 @@ def _store_conversations_sync(recording_id: str, conversations: list[dict]):
     """Store conversation records in DB."""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from src.models.recording import Recording
 
     engine = create_engine(settings.database_url_sync)
     SessionLocal = sessionmaker(bind=engine)
     with SessionLocal() as session:
+        # Look up the parent recording to copy denormalized fields
+        recording = session.query(Recording).filter(
+            Recording.id == uuid.UUID(recording_id)
+        ).first()
+        salesperson_id = recording.salesperson_id if recording else None
+        recorded_at = recording.recorded_at if recording else None
+
         # Clear any existing conversations for this recording
         session.query(Conversation).filter(
             Conversation.recording_id == uuid.UUID(recording_id)
@@ -78,9 +86,12 @@ def _store_conversations_sync(recording_id: str, conversations: list[dict]):
         for conv in conversations:
             conversation = Conversation(
                 recording_id=uuid.UUID(recording_id),
+                salesperson_id=salesperson_id,
                 start_time=conv["start_time"],
                 end_time=conv["end_time"],
+                duration_seconds=conv["end_time"] - conv["start_time"],
                 segment_count=conv["segment_count"],
+                recorded_at=recorded_at,
             )
             session.add(conversation)
 

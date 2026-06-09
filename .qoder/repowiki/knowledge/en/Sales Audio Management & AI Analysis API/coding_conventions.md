@@ -1,3 +1,5 @@
-- Dependency injection is used for database sessions and current user authentication in API route handlers via FastAPI's `Depends`.
-- Service layer functions are implemented as async methods that accept an `AsyncSession` as the first argument for database interactions.
-- Pydantic models in `src/schemas/` are used for both request validation and response serialization, mirroring the structure of domain models.
+- Route handlers delegate business logic to service functions in `src/services/`, keeping API modules thin and focused on request/response mapping.
+- Database sessions are injected as `AsyncSession` dependencies via `src/database.get_db`, ensuring automatic commit/rollback per request.
+- Pydantic models in `src/schemas/` mirror domain entities for request validation and response serialization, decoupled from ORM models in `src/models/`.
+- Background tasks are orchestrated as Celery chains in `src/workers/pipeline.py`, with each stage implemented as an independent task module in `src/workers/`.
+- External AI services (STT, diarization, LLM) are abstracted behind pure Python wrappers in `src/ai/`, isolating vendor-specific API calls from core logic.

@@ -2,11 +2,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import FileResponse
 
 from src.api.deps import require_brand_admin_up, require_operator_up, require_salesperson_up
 from src.database import get_db
 from src.models.user import User
-from src.schemas.recording import RecordingResponse, RecordingStatusResponse
+from src.schemas.recording import PaginatedRecordingsResponse, RecordingResponse, RecordingStatusResponse
 from src.services.recording import (
     get_recording,
     get_recording_status,
@@ -14,11 +15,12 @@ from src.services.recording import (
     reprocess_recording,
     upload_recording,
 )
+from src.storage.local import get_storage
 
 router = APIRouter(prefix="/recordings", tags=["Recordings"])
 
 
-@router.get("", response_model=dict)
+@router.get('', response_model=PaginatedRecordingsResponse)
 async def list_recordings_endpoint(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -81,6 +83,26 @@ async def upload_recording_endpoint(
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{recording_id}/audio")
+async def stream_recording_audio(
+    recording_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_salesperson_up),
+):
+    recording = await get_recording(db, recording_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    storage = get_storage()
+    file_path = storage.base_dir / recording.file_url
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return FileResponse(
+        path=str(file_path),
+        media_type=recording.format,
+        headers={"Accept-Ranges": "bytes"},
+    )
 
 
 @router.get("/{recording_id}", response_model=RecordingResponse)

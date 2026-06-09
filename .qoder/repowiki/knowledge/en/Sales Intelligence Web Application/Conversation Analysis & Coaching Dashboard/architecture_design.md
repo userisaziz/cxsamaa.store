@@ -1,0 +1,5 @@
+- Entry Points: Next.js App Router pages (`recordings/page.tsx`, `recordings/[id]/page.tsx`, `coaching/page.tsx`) serve as the primary UI containers.
+- Feature Components: A dedicated `features/` directory encapsulates complex domain logic, including `WaveformPlayer` (audio visualization), `TranscriptViewer` (text synchronization), `ConversationTimeline` (temporal mapping), and `AIInsightsPanel` (analysis display).
+- Data Fetching: Relies on `@tanstack/react-query` for server-state management, with automatic refetching intervals configured for processing statuses (e.g., `TRANSCRIBING`, `ANALYZING`).
+- State Management: Local component state (`useState`) manages UI interactions like active conversation selection and drawer visibility, while global auth state is sourced from `useAuthStore`.
+- Dependency Direction: Pages orchestrate feature components, which in turn consume shared types from `@samaa/shared` and interact with the backend via a centralized `api` client.

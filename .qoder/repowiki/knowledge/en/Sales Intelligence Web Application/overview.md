@@ -1,0 +1,1 @@
+Orchestrates a Next.js-based dashboard for sales audio analytics, unifying authentication, layout management, and domain-specific visualization modules into a cohesive user experience.

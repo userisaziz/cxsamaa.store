@@ -1,0 +1,1 @@
+Orchestrates a monorepo-based sales audio intelligence platform, unifying a Next.js dashboard, Python AI pipeline, and shared TypeScript contracts through Turborepo and Docker.

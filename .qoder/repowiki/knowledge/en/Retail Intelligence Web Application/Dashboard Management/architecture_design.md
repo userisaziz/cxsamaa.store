@@ -1,4 +1,0 @@
-- Implements a Next.js App Router structure using route groups `(dashboard)` to isolate protected views.
-- Adopts a client-side data fetching pattern where each `page.tsx` acts as a self-contained view component, utilizing `@tanstack/react-query` for state management and caching.
-- Centralizes API communication through a custom `api-client` wrapper that handles JWT authentication, token refresh, and error handling.
-- Establishes a hierarchical navigation flow from Brand (global) to Store (location-specific) to Salesperson (individual detail), supported by shared UI components like `KPICard` and `Breadcrumbs`.

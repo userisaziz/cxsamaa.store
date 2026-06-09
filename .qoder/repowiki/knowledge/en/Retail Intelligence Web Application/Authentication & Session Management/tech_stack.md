@@ -1,1 +1,0 @@
-Uses Zustand for client-side state management and Next.js App Router route groups for layout isolation.

@@ -1,0 +1,3 @@
+- All feature pages use default exports for Next.js route compatibility.
+- UI components are organized into domain-specific folders (charts, features, layout, ui) under `src/components`.
+- API interactions are centralized through a typed `api` client instance rather than direct fetch calls in components.

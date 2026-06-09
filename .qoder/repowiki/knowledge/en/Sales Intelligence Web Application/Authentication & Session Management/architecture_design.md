@@ -1,0 +1,4 @@
+- State management: Uses a Zustand store (`apps/web/src/store/auth.ts`) to manage authentication state (user, tokens, loading status) with `login`, `logout`, and `hydrate` actions.
+- Persistence: Sessions are persisted in `localStorage` (access_token, refresh_token, user JSON), with hydration on mount to restore session state.
+- Route Protection: An `AuthGuard` component (`apps/web/src/components/auth-guard.tsx`) wraps protected routes, checking `isAuthenticated` status and redirecting unauthenticated users to `/login` or authenticated users away from public paths.
+- Login UI: The login page (`apps/web/src/app/(auth)/login/page.tsx`) is a client-side Next.js page that consumes the auth store and an API client to perform credential-based login.

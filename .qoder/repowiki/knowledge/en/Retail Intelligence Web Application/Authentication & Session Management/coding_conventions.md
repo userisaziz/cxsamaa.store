@@ -1,2 +1,0 @@
-- Persisting authentication credentials (access token, refresh token, user object) in browser `localStorage` for session continuity across reloads.
-- Implementing automatic token refresh logic within the API client when encountering 401 Unauthorized responses before failing the request.

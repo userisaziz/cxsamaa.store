@@ -1,5 +1,7 @@
-- Entry point: `src/main.py` initializes a FastAPI application with CORS middleware and includes the v1 API router defined in `src/api/v1/router.py`.
-- Layered structure: `src/api/` handles HTTP routing and dependency injection (auth, DB sessions); `src/services/` contains business logic; `src/models/` defines SQLAlchemy ORM entities; `src/schemas/` manages Pydantic validation models.
-- Async processing: Long-running AI tasks (STT, diarization, analysis) are offloaded to Celery workers (`src/workers/`) using a Redis broker/backend, orchestrated via a chained pipeline in `src/workers/pipeline.py`.
-- Data persistence: Uses SQLAlchemy with an async PostgreSQL engine (`src/database.py`) and Alembic for schema migrations (`alembic/`).
-- Configuration: Centralized in `src/config.py` using `pydantic-settings` for environment variable management.
+- Entry point: `src/main.py` creates a FastAPI app, applies CORS from `src/config.py`, and mounts `src/api/v1/router.py`.
+- API layer: `src/api/v1/` hosts resource routers (auth, brands, stores, salespeople, recordings, conversations, search, analytics) with dependency injection via `src/api/deps.py` for async DB sessions and JWT-authenticated users.
+- Service layer: `src/services/` encapsulates business logic (e.g., recording upload triggers `src/workers/pipeline.start_processing_pipeline`), while `src/models/` defines SQLAlchemy ORM entities and `src/schemas/` provides Pydantic validation contracts.
+- Async data access: `src/database.py` configures an async SQLAlchemy engine/session factory used by services and injected into route handlers.
+- Background processing: `src/workers/celery_app.py` defines a Celery app backed by Redis; `src/workers/pipeline.py` chains tasks (preprocessing → STT → diarization → segmentation → analysis → scoring) that invoke `src/ai/` wrappers around NVIDIA NIM APIs.
+- Storage abstraction: `src/storage/` offers a pluggable backend interface (local implementation provided) for audio file persistence.
+- Migrations: Alembic (`alembic/`) manages PostgreSQL schema evolution, including vector support via pgvector.

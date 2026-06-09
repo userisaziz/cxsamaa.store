@@ -1,0 +1,3 @@
+- Audio Visualization: `wavesurfer.js` for rendering interactive waveforms in `WaveformPlayer`.
+- Data Visualization: `recharts` for rendering radar charts and trend lines in the coaching dashboard.
+- State Management: `@tanstack/react-query` for asynchronous data fetching and caching.

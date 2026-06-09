@@ -1,0 +1,1 @@
+Next.js App Router with React Server Components disabled ("use client") for interactive dashboards; TanStack Query for server state management; Recharts for data visualization.

@@ -1,0 +1,3 @@
+- Role-based navigation filtering is implemented by defining an optional `roles` array in navigation item configurations and filtering against the current user's role from the auth store.
+- Responsive sidebar behavior is achieved by rendering a permanent aside for large screens and a hamburger-triggered sheet drawer for smaller breakpoints, controlled by CSS visibility classes.
+- Status indicators use a configuration map to associate domain states with specific visual styles (colors, labels) and animation behaviors (e.g., pulsing dots for processing states).

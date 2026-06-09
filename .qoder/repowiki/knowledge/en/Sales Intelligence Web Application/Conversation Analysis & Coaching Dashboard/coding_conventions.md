@@ -1,0 +1,4 @@
+- Use of `forwardRef` and `useImperativeHandle` to expose player control methods (e.g., `seekTo`) from media components to parent pages.
+- Implementation of conditional auto-refresh logic in `useQuery` hooks, polling every 5 seconds only when entities are in intermediate processing states.
+- Consistent time formatting utility pattern (`formatTime`) across timeline, transcript, and player components to display MM:SS or HH:MM formats.
+- Mapping of domain-specific enum values (e.g., `OUTCOME_CONFIG`, `SPEAKER_COLORS`) to UI presentational properties like colors and icons at the module level.

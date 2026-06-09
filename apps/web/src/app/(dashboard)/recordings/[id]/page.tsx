@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useState, useMemo, useRef, useCallback } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type {
   Recording,
@@ -16,6 +16,7 @@ import { api } from "@/lib/api-client";
 import { StatusBadge } from "@/components/status-badge";
 import { KPICard } from "@/components/kpi-card";
 import { TranscriptViewer } from "@/components/features/transcript-viewer";
+import { WaveformPlayer, type WaveformPlayerHandle } from "@/components/features/waveform-player";
 import { ConversationTimeline } from "@/components/features/conversation-timeline";
 import { AIInsightsPanel } from "@/components/features/ai-insights-panel";
 import { ConversationDrawer } from "@/components/features/conversation-drawer";
@@ -41,9 +42,18 @@ export default function RecordingDetailPage() {
   const params = useParams();
   const recordingId = params.id as string;
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  // Pre-select conversation from query param (e.g. /recordings/[id]?conv=[convId])
+  const searchParams = useSearchParams();
+  const convParam = searchParams.get("conv");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(convParam);
   const [drawerConversation, setDrawerConversation] = useState<Conversation | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const waveformRef = useRef<WaveformPlayerHandle>(null);
+
+  const handleTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
 
   // Fetch recording
   const { data: recording } = useQuery({
@@ -100,6 +110,16 @@ export default function RecordingDetailPage() {
   });
 
   const analyses = analysisQueries.data ?? new Map<string, ConversationAnalysis>();
+
+  const handleSegmentSeek = useCallback((seg: TranscriptSegment) => {
+    waveformRef.current?.seekTo(seg.start_time);
+    const conv = conversations?.find(
+      (c) => seg.start_time >= c.start_time && seg.end_time <= c.end_time,
+    );
+    if (conv) {
+      setActiveConversationId(conv.id);
+    }
+  }, [conversations]);
 
   // Fetch salesperson info for breadcrumb
   const { data: salesperson } = useQuery({
@@ -186,6 +206,15 @@ export default function RecordingDetailPage() {
         </div>
       )}
 
+      {/* Audio Player */}
+      {recording && (
+        <WaveformPlayer
+          ref={waveformRef}
+          recordingId={recordingId}
+          onTimeUpdate={handleTimeUpdate}
+        />
+      )}
+
       {/* Conversation Timeline */}
       {conversations && conversations.length > 0 && (
         <Card>
@@ -219,15 +248,8 @@ export default function RecordingDetailPage() {
               segments={transcript ?? []}
               conversations={conversations}
               activeConversationId={activeConversationId}
-              onSegmentClick={(seg) => {
-                // Find which conversation this segment belongs to
-                const conv = conversations?.find(
-                  (c) => seg.start_time >= c.start_time && seg.end_time <= c.end_time,
-                );
-                if (conv) {
-                  setActiveConversationId(conv.id);
-                }
-              }}
+              currentTime={currentTime}
+              onSegmentClick={handleSegmentSeek}
             />
           </CardContent>
         </Card>

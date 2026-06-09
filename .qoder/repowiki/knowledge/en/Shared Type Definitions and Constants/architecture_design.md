@@ -1,0 +1,4 @@
+- Entry point `src/index.ts` re-exports all public symbols from `api-types.ts` and `constants.ts`.
+- `api-types.ts` defines request/response interfaces for Auth, Brand, Store, Salesperson, Recording, Transcript, Conversation, Metrics, Search, and Analytics domains, ensuring type consistency with backend Pydantic schemas.
+- `constants.ts` declares immutable role enums (`ROLES`), recording lifecycle statuses (`RECORDING_STATUSES`), conversation outcomes (`OUTCOMES`), and audio constraints.
+- Build configuration in `package.json` uses `tsc` for compilation and type-checking, with `src/index.ts` as the main entry.

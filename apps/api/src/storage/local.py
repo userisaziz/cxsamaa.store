@@ -29,7 +29,7 @@ class LocalStorage(StorageBackend):
         file_path = self.base_dir / destination
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_bytes(file_data)
-        return str(file_path)
+        return destination
 
     def download_sync(self, source: str) -> bytes:
         file_path = self.base_dir / source

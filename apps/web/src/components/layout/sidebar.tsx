@@ -12,6 +12,7 @@ import {
   Headphones,
   GraduationCap,
   Search,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,11 @@ const navItems: NavItem[] = [
     label: "Recordings",
     href: "/recordings",
     icon: Mic,
+  },
+  {
+    label: "Conversations",
+    href: "/conversations",
+    icon: MessageSquare,
   },
   {
     label: "Search",

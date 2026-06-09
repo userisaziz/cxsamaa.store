@@ -1,4 +1,0 @@
-- **Client-Side Auth Enforcement**: Authentication is enforced at the component level via `AuthGuard` rather than server-side middleware, relying on client-side state (Zustand) and local storage for session persistence.
-- **Unified Provider Hierarchy**: The root layout wraps all application content in a shared `Providers` component, injecting a configured `TanStack Query` client for data fetching and `TooltipProvider` for UI accessibility across all modules.
-- **Monorepo Integration**: Depends on a shared internal package (`@samaa/shared`) for cross-cutting concerns, ensuring consistent API client behavior and type definitions across the web app and other potential services.
-- **Route Grouping Strategy**: Uses Next.js route groups `(auth)`, `(dashboard)`, and `(operations)` to logically separate layout contexts and access requirements without affecting URL paths, allowing distinct sidebar and navigation structures for different user roles.

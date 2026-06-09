@@ -1,2 +1,0 @@
-- Global styles are defined in `globals.css` using CSS variables for theme tokens, consumed via Tailwind's `@theme` directive.
-- Root page uses client-side redirection based on authentication state rather than server-side redirects.

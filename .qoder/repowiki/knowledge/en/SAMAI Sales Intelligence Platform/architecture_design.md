@@ -1,0 +1,3 @@
+- Uses Turborepo to manage build dependencies and task execution across the Next.js web app and shared TypeScript packages.
+- Relies on a root-level `start_servers.sh` script to coordinate the lifecycle of heterogeneous services: provisioning PostgreSQL/Redis via Docker Compose, running Python API migrations, and launching the FastAPI, Celery, and Next.js processes concurrently.
+- Enforces environment consistency by symlinking a root `.env` file into the Python API service directory during startup.

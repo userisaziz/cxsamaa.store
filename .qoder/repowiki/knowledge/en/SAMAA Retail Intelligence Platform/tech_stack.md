@@ -1,1 +1,0 @@
-Turborepo for monorepo task orchestration; Docker Compose for shared infrastructure (PostgreSQL with pgvector, Redis); Next.js for the frontend; FastAPI and Celery for the backend AI pipeline.

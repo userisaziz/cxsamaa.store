@@ -1,0 +1,2 @@
+- Global styles are managed via CSS custom properties mapped to Tailwind theme variables in `globals.css`.
+- Client-side state hydration is performed in root page effects before executing navigation logic.

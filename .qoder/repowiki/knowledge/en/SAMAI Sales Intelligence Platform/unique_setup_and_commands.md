@@ -1,0 +1,1 @@
+Execute `./start_servers.sh` at the root to provision infrastructure, run database migrations, and boot all application services in a single coordinated workflow.

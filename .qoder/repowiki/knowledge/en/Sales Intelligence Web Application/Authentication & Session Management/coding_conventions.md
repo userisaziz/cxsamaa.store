@@ -1,0 +1,2 @@
+- Client-side components are explicitly marked with "use client" directive at the top of the file.
+- Authentication state mutations (login/logout) synchronously update localStorage and Zustand store state.

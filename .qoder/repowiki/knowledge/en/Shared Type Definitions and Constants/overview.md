@@ -1,0 +1,1 @@
+Provides centralized TypeScript interfaces for API contracts and shared constants across the SAMAA platform.

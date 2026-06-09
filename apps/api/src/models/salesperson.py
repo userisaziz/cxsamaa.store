@@ -29,3 +29,6 @@ class Salesperson(Base):
     recordings: Mapped[list["Recording"]] = relationship(
         "Recording", back_populates="salesperson", cascade="all, delete-orphan"
     )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        "Conversation", back_populates="salesperson"
+    )

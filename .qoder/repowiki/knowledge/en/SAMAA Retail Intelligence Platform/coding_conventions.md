@@ -1,2 +1,0 @@
-- Enforces a unified design system ('The Analyst's Workbench') across the web application using specific OKLCH color tokens and typography rules defined in `DESIGN.md`.
-- Utilizes workspace-level scripts in `package.json` to delegate commands to specific apps via `npm run --workspace`.

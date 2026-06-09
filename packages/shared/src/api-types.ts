@@ -153,6 +153,23 @@ export interface Conversation {
   created_at: string;
 }
 
+export interface ConversationListItem {
+  id: string;
+  recording_id: string;
+  salesperson_id: string | null;
+  start_time: number;
+  end_time: number;
+  duration_seconds: number | null;
+  segment_count: number;
+  summary: string | null;
+  recorded_at: string | null;
+  created_at: string;
+  outcome: string | null;
+  confidence: number | null;
+  intent: string | null;
+  scores: Record<string, number> | null;
+}
+
 export interface StructuredObjection {
   category: string;
   issue: string;

@@ -1,0 +1,4 @@
+- Seed initial data with `python scripts/seed.py`.
+- Run Alembic migrations: `alembic upgrade head` (config in `alembic.ini` and `alembic/env.py`).
+- Start API server: `uvicorn src.main:app --reload` (port/host from `src/config.py`).
+- Launch Celery worker: `celery -A src.workers.celery_app worker --loglevel=info` to process audio pipelines.

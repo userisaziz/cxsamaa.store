@@ -15,10 +15,17 @@ class Conversation(Base):
     recording_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("recordings.id"), nullable=False, index=True
     )
+    salesperson_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("salespeople.id"), nullable=True, index=True
+    )
     start_time: Mapped[float] = mapped_column(Float, nullable=False)
     end_time: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     segment_count: Mapped[int] = mapped_column(Integer, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -26,6 +33,9 @@ class Conversation(Base):
     # Relationships
     recording: Mapped["Recording"] = relationship(
         "Recording", back_populates="conversations"
+    )
+    salesperson: Mapped["Salesperson | None"] = relationship(
+        "Salesperson", back_populates="conversations"
     )
     analysis: Mapped["ConversationAnalysis | None"] = relationship(
         "ConversationAnalysis", back_populates="conversation", uselist=False

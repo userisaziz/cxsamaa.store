@@ -1,0 +1,4 @@
+- All page components are marked as "use client" to enable interactive hooks and state management.
+- Data fetching is consistently implemented using `useQuery` with standardized query keys (e.g., `["stores"]`, `["salesperson", id]`).
+- Empty states are handled uniformly using an `Inbox` icon and descriptive text within `Card` components.
+- Performance scores are visually encoded using consistent color thresholds (green ≥ 80, amber ≥ 60, red < 60) via utility functions or inline logic.

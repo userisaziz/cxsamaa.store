@@ -1,1 +1,0 @@
-Next.js App Router with React Server Components disabled via "use client" directive; @tanstack/react-query for server-state management; recharts for radar and line chart visualizations in the coaching dashboard.

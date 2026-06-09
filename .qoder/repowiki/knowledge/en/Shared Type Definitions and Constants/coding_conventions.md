@@ -1,0 +1,3 @@
+- Use `as const` objects paired with derived union types for enum-like constants (e.g., `ROLES`, `RECORDING_STATUSES`).
+- Name request interfaces with `Request` suffix and response interfaces with `Response` suffix to distinguish API contract directions.
+- Use nullable types (`| null`) for optional fields in API responses instead of `undefined` or optional properties.

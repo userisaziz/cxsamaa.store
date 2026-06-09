@@ -20,11 +20,12 @@
 
 ## Update Summary
 **Changes Made**
-- Added new API endpoints: upload_recording(), reprocess_recording(), and get_recording_status()
-- Enhanced endpoint catalog with comprehensive upload, status monitoring, and reprocessing capabilities
+- Complete replacement of recording management system with new six-stage Celery-based pipeline
+- Streamlined API with comprehensive endpoint coverage including upload, status tracking, and reprocessing capabilities
+- Enhanced authentication and authorization with role-based access control
 - Integrated Celery pipeline orchestration for asynchronous processing
-- Implemented robust authentication and authorization with role-based access control
 - Added comprehensive error handling and validation for file uploads and processing workflows
+- Removed legacy multi-stage processing approach in favor of unified pipeline
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -39,7 +40,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive API documentation for audio recording management. The API enables complete recording lifecycle management including file upload, status tracking, and reprocessing capabilities. It covers endpoints for uploading audio recordings, monitoring processing status through multiple pipeline stages, retrieving recording details, and managing audio files. The system supports asynchronous processing through a multi-stage pipeline with robust error handling and validation.
+This document provides comprehensive API documentation for audio recording management. The API enables complete recording lifecycle management including file upload, status tracking, and reprocessing capabilities. It covers endpoints for uploading audio recordings, monitoring processing status through multiple pipeline stages, retrieving recording details, streaming audio files, and managing audio files. The system supports asynchronous processing through a six-stage Celery pipeline with robust error handling and validation.
 
 **Updated** The API now includes comprehensive endpoint coverage for recording management with full pipeline integration and advanced processing capabilities.
 
@@ -73,10 +74,10 @@ Pipeline --> Workers
 
 **Diagram sources**
 - [router.py:1-20](file://apps/api/src/api/v1/router.py#L1-L20)
-- [recordings.py:1-125](file://apps/api/src/api/v1/recordings.py#L1-L125)
+- [recordings.py:1-147](file://apps/api/src/api/v1/recordings.py#L1-L147)
 - [recording.py:1-60](file://apps/api/src/models/recording.py#L1-L60)
-- [recording_schemas.py:1-71](file://apps/api/src/schemas/recording.py#L1-L71)
-- [recording_service.py:1-262](file://apps/api/src/services/recording.py#L1-L262)
+- [recording_schemas.py:1-74](file://apps/api/src/schemas/recording.py#L1-L74)
+- [recording_service.py:1-268](file://apps/api/src/services/recording.py#L1-L268)
 - [pipeline.py:1-35](file://apps/api/src/workers/pipeline.py#L1-L35)
 - [local_storage.py:1-50](file://apps/api/src/storage/local.py#L1-L50)
 - [deps.py:1-67](file://apps/api/src/api/deps.py#L1-L67)
@@ -86,7 +87,7 @@ Pipeline --> Workers
 - [README.md:1-308](file://README.md#L1-L308)
 
 ## Core Components
-- **API Router**: Exposes endpoints under `/api/v1/recordings` for upload, listing, status checking, and reprocessing operations
+- **API Router**: Exposes endpoints under `/api/v1/recordings` for upload, listing, status checking, audio streaming, and reprocessing operations
 - **Models**: Define the recording lifecycle with comprehensive status tracking and metadata storage
 - **Schemas**: Pydantic models for request/response validation and serialization with detailed field definitions
 - **Services**: Encapsulate business logic for recording operations, status management, and pipeline coordination
@@ -96,10 +97,10 @@ Pipeline --> Workers
 **Updated** The API now provides comprehensive recording management with full pipeline integration and advanced processing capabilities.
 
 **Section sources**
-- [recordings.py:1-125](file://apps/api/src/api/v1/recordings.py#L1-L125)
+- [recordings.py:1-147](file://apps/api/src/api/v1/recordings.py#L1-L147)
 - [recording.py:1-60](file://apps/api/src/models/recording.py#L1-L60)
-- [recording_schemas.py:1-71](file://apps/api/src/schemas/recording.py#L1-L71)
-- [recording_service.py:1-262](file://apps/api/src/services/recording.py#L1-L262)
+- [recording_schemas.py:1-74](file://apps/api/src/schemas/recording.py#L1-L74)
+- [recording_service.py:1-268](file://apps/api/src/services/recording.py#L1-L268)
 - [pipeline.py:1-35](file://apps/api/src/workers/pipeline.py#L1-L35)
 - [local_storage.py:1-50](file://apps/api/src/storage/local.py#L1-L50)
 
@@ -132,7 +133,7 @@ API-->>Client : "201 Created + RecordingResponse"
 ```
 
 **Diagram sources**
-- [recordings.py:56-84](file://apps/api/src/api/v1/recordings.py#L56-L84)
+- [recordings.py:58-86](file://apps/api/src/api/v1/recordings.py#L58-L86)
 - [recording_service.py:83-126](file://apps/api/src/services/recording.py#L83-L126)
 - [local_storage.py:14-32](file://apps/api/src/storage/local.py#L14-L32)
 - [pipeline.py:12-34](file://apps/api/src/workers/pipeline.py#L12-L34)
@@ -163,7 +164,7 @@ API-->>Client : "201 Created + RecordingResponse"
 **Updated** Enhanced with comprehensive validation and robust error handling for file uploads.
 
 **Section sources**
-- [recordings.py:56-84](file://apps/api/src/api/v1/recordings.py#L56-L84)
+- [recordings.py:58-86](file://apps/api/src/api/v1/recordings.py#L58-L86)
 - [recordings.py:35-36](file://apps/api/src/api/v1/recordings.py#L35-L36)
 
 #### List Recordings
@@ -180,7 +181,7 @@ API-->>Client : "201 Created + RecordingResponse"
 - **Authentication**: OPERATOR role required
 
 **Section sources**
-- [recordings.py:21-53](file://apps/api/src/api/v1/recordings.py#L21-L53)
+- [recordings.py:23-55](file://apps/api/src/api/v1/recordings.py#L23-L55)
 - [recording_service.py:18-61](file://apps/api/src/services/recording.py#L18-L61)
 
 #### Get Recording Detail
@@ -192,8 +193,20 @@ API-->>Client : "201 Created + RecordingResponse"
 - **Authentication**: SALESPERSON role required
 
 **Section sources**
-- [recordings.py:86-95](file://apps/api/src/api/v1/recordings.py#L86-L95)
+- [recordings.py:108-117](file://apps/api/src/api/v1/recordings.py#L108-L117)
 - [recording_service.py:64-68](file://apps/api/src/services/recording.py#L64-L68)
+
+#### Stream Recording Audio
+- **Method**: GET
+- **URL**: `/api/v1/recordings/{recording_id}/audio`
+- **Path parameter**:
+  - `recording_id`: UUID
+- **Response**: FileResponse (audio file)
+- **Authentication**: SALESPERSON role required
+- **Purpose**: Stream audio file directly from storage
+
+**Section sources**
+- [recordings.py:88-105](file://apps/api/src/api/v1/recordings.py#L88-L105)
 
 #### Get Recording Status
 - **Method**: GET
@@ -205,7 +218,7 @@ API-->>Client : "201 Created + RecordingResponse"
 - **Purpose**: Monitor processing progress through pipeline stages
 
 **Section sources**
-- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
+- [recordings.py:120-129](file://apps/api/src/api/v1/recordings.py#L120-L129)
 
 #### Reprocess Recording
 - **Method**: POST
@@ -220,7 +233,7 @@ API-->>Client : "201 Created + RecordingResponse"
 - **Authentication**: BRAND_ADMIN role required
 
 **Section sources**
-- [recordings.py:110-125](file://apps/api/src/api/v1/recordings.py#L110-L125)
+- [recordings.py:132-147](file://apps/api/src/api/v1/recordings.py#L132-L147)
 
 ### Data Models and Schemas
 
@@ -398,9 +411,9 @@ Service --> Auth
 **Updated** Enhanced with comprehensive troubleshooting for new pipeline and authentication features.
 
 **Section sources**
-- [recordings.py:64-84](file://apps/api/src/api/v1/recordings.py#L64-L84)
-- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
-- [recordings.py:110-125](file://apps/api/src/api/v1/recordings.py#L110-L125)
+- [recordings.py:64-86](file://apps/api/src/api/v1/recordings.py#L64-L86)
+- [recordings.py:120-129](file://apps/api/src/api/v1/recordings.py#L120-L129)
+- [recordings.py:132-147](file://apps/api/src/api/v1/recordings.py#L132-L147)
 - [recording.py:12-22](file://apps/api/src/models/recording.py#L12-L22)
 
 ## Conclusion
@@ -426,7 +439,7 @@ The Recording Management API provides a comprehensive foundation for audio inges
 - **Error reporting**: Comprehensive error messages with stack traces for debugging
 
 **Section sources**
-- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
+- [recordings.py:120-129](file://apps/api/src/api/v1/recordings.py#L120-L129)
 - [recording.py:12-22](file://apps/api/src/models/recording.py#L12-L22)
 
 ### Batch Operations Examples

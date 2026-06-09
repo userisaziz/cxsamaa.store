@@ -1,0 +1,1 @@
+Handles user login, session persistence via localStorage, and route-level access control for the web application.

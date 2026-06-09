@@ -1,0 +1,1 @@
+Turborepo for monorepo task orchestration; Docker Compose for shared infrastructure (PostgreSQL with pgvector, Redis); Next.js (web) and FastAPI/Celery (api) as child runtimes.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { TranscriptSegment, Conversation } from "@samaa/shared";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,7 @@ interface TranscriptViewerProps {
   segments: TranscriptSegment[];
   conversations?: Conversation[];
   activeConversationId?: string | null;
+  currentTime?: number;
   onSegmentClick?: (segment: TranscriptSegment) => void;
   onConversationHighlight?: (conversationId: string) => void;
 }
@@ -34,6 +35,7 @@ export function TranscriptViewer({
   segments,
   conversations,
   activeConversationId,
+  currentTime,
   onSegmentClick,
 }: TranscriptViewerProps) {
   // Group segments by conversation time ranges
@@ -47,6 +49,18 @@ export function TranscriptViewer({
     });
   }, [segments, conversations]);
 
+  const activeSegmentRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll active segment into view
+  useEffect(() => {
+    if (activeSegmentRef.current) {
+      activeSegmentRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [currentTime]);
+
   if (segments.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-steel">
@@ -58,13 +72,20 @@ export function TranscriptViewer({
   return (
     <div className="space-y-1">
       {segmentsWithConversation.map((seg) => {
-        const isActive = activeConversationId && seg.conversationId === activeConversationId;
+        const isActiveConversation = activeConversationId && seg.conversationId === activeConversationId;
+        const isActiveTime =
+          currentTime !== undefined &&
+          currentTime >= seg.start_time &&
+          currentTime < seg.end_time;
+        const isActive = isActiveConversation || isActiveTime;
         return (
           <div
             key={seg.id}
+            ref={isActiveTime ? activeSegmentRef : undefined}
             className={cn(
               "flex gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent/50 cursor-pointer",
-              isActive && "bg-accent",
+              isActiveConversation && "bg-accent",
+              isActiveTime && !isActiveConversation && "bg-brand-green-soft/60",
             )}
             onClick={() => onSegmentClick?.(seg)}
           >

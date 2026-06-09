@@ -1,4 +1,0 @@
-- Use the `cn` utility to merge conditional Tailwind classes for interactive states like active links or variant styling.
-- Apply consistent semantic color tokens (e.g., `text-ink`, `text-steel`, `bg-brand-green-soft`) across sidebars and cards for unified theming.
-- Render navigation items as `Link` components with icon + label pairs, highlighting the active route via `usePathname` checks.
-- Display user identity in sidebars using avatar initials derived from `full_name` alongside role or context labels.

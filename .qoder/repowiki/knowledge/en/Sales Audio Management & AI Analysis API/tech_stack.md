@@ -1,3 +1,1 @@
-- Asynchronous PostgreSQL driver `asyncpg` with SQLAlchemy 2.0 async support.
-- Celery with Redis for distributed task queue management.
-- NVIDIA NIM integration for STT (Parakeet), diarization (NeMo), and LLM-based analysis (Llama 3.3).
+FastAPI + Uvicorn for async HTTP; SQLAlchemy (async) + asyncpg for PostgreSQL with pgvector; Celery + Redis for background task orchestration; python-jose + passlib(bcrypt) for JWT auth; pydantic-settings for env-driven config; Alembic for migrations; NVIDIA NIM APIs (Parakeet STT, NeMo diarization, Llama 3.3 analysis) via custom `src/ai/` clients.

@@ -1,1 +1,0 @@
-Root-level `start_servers.sh` automates the entire development environment bootstrapping, including Docker service health checks, database migrations via Alembic, and concurrent launching of the API, worker, and web processes.
