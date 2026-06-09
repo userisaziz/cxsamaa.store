@@ -1,0 +1,3 @@
+- Uses Next.js route groups (parenthesized directories) to decouple layout inheritance from URL structure.
+- Implements client-side authentication guards instead of server-side middleware redirections.
+- Centralizes API communication through a typed singleton client with built-in JWT refresh handling.

@@ -1,6 +1,4 @@
-- **Core**: FastAPI, Uvicorn, Pydantic v2.
-- **Data**: PostgreSQL (asyncpg), SQLAlchemy 2.0, Alembic, pgvector.
-- **Workers**: Celery, Redis.
-- **AI**: NVIDIA NIM APIs (Parakeet STT, NeMo Diarization, Llama 3.3 LLM).
-- **Audio**: Pydub, NumPy.
-- **Auth**: Python-Jose (JWT), Passlib (bcrypt).
+- FastAPI with Uvicorn for async HTTP serving.
+- Celery with Redis for background task orchestration.
+- SQLAlchemy (async) with PostgreSQL and pgvector for data persistence and embeddings.
+- NVIDIA NIM APIs (Parakeet STT, NeMo Diarization, Llama 3.3) for AI-driven audio analysis.

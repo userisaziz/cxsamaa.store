@@ -79,17 +79,17 @@ const SKILL_TIPS: Record<string, string> = {
 };
 
 function getScoreColor(score: number | null): string {
-  if (score == null) return "text-muted-foreground";
-  if (score >= 80) return "text-green-600";
-  if (score >= 60) return "text-amber-600";
-  return "text-red-600";
+  if (score == null) return "text-steel";
+  if (score >= 80) return "text-brand-green-deep";
+  if (score >= 60) return "text-amber-700";
+  return "text-destructive";
 }
 
 function getScoreBg(score: number | null): string {
   if (score == null) return "bg-muted";
-  if (score >= 80) return "bg-green-500";
-  if (score >= 60) return "bg-amber-500";
-  return "bg-red-400";
+  if (score >= 80) return "bg-brand-green";
+  if (score >= 60) return "bg-brand-warn";
+  return "bg-brand-error";
 }
 
 export default function CoachingPage() {
@@ -147,11 +147,11 @@ export default function CoachingPage() {
   }));
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Coaching Dashboard</h1>
-          <p className="text-sm text-steel">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Coaching Dashboard</h1>
+          <p className="mt-1 text-sm text-steel">
             AI-powered performance insights and recommendations
           </p>
         </div>
@@ -315,7 +315,7 @@ export default function CoachingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertTriangle className="h-4 w-4 text-brand-warn" />
                   Improvement Areas
                 </CardTitle>
               </CardHeader>
@@ -324,7 +324,7 @@ export default function CoachingPage() {
                   {weakestSkills.map((s) => (
                     <div
                       key={s.key}
-                      className="flex items-start gap-3 rounded-md border border-amber-100 bg-amber-50/50 p-3"
+                      className="flex items-start gap-3 rounded-md border border-brand-warn/20 bg-amber-50/50 p-3"
                     >
                       <Badge
                         variant="outline"
@@ -350,7 +350,7 @@ export default function CoachingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-blue-500" />
+                  <Brain className="h-4 w-4 text-brand-tag" />
                   Recommendations
                 </CardTitle>
               </CardHeader>
@@ -359,9 +359,9 @@ export default function CoachingPage() {
                   {recommendations.map((rec, i) => (
                     <div
                       key={i}
-                      className="flex items-start gap-3 rounded-md border border-blue-100 bg-blue-50/50 p-3"
+                      className="flex items-start gap-3 rounded-md border border-brand-tag/20 bg-blue-50/50 p-3"
                     >
-                      <Lightbulb className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                      <Lightbulb className="h-4 w-4 text-brand-tag shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium">
                           Improve {rec.skill} (currently {rec.score.toFixed(0)})

@@ -1,5 +1,0 @@
-- Dependency Injection: FastAPI endpoints use `Depends()` to inject database sessions and authenticated user contexts, keeping route handlers clean and testable.
-- Service-Repository Pattern: Business logic is isolated in `src/services/` modules, which are called by API routers, ensuring controllers remain thin.
-- Sync/Async Storage Duality: The storage backend interface defines both async methods for the API and sync methods for Celery workers to ensure compatibility across execution contexts.
-- Pydantic Response Models: All API endpoints return strongly-typed Pydantic models defined in `src/schemas/`, ensuring consistent JSON serialization and documentation.
-- Celery Chain Orchestration: Complex audio processing tasks are broken into discrete Celery tasks and linked using `celery.chain` to maintain state and order of operations.

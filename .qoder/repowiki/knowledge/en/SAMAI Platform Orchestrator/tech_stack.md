@@ -1,1 +1,0 @@
-Turborepo for monorepo task caching and execution; Docker Compose for local infrastructure provisioning.

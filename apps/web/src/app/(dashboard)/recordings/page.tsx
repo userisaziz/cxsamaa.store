@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mic, ChevronLeft, ChevronRight, RefreshCw, Eye, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
 const STATUSES = [
@@ -106,11 +107,11 @@ export default function RecordingsPage() {
   const totalPages = data?.total_pages ?? 1;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Recordings</h1>
-          <p className="text-sm text-steel">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Recordings</h1>
+          <p className="mt-1 text-sm text-steel">
             {data?.total ?? 0} total recordings
           </p>
         </div>
@@ -134,7 +135,7 @@ export default function RecordingsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap rounded-lg border border-border bg-card p-4">
         <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by status" />
@@ -148,21 +149,21 @@ export default function RecordingsPage() {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground">From:</label>
-          <input
+          <label className="text-sm text-steel">From:</label>
+          <Input
             type="date"
             value={dateFrom}
             onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-auto"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground">To:</label>
-          <input
+          <label className="text-sm text-steel">To:</label>
+          <Input
             type="date"
             value={dateTo}
             onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-auto"
           />
         </div>
         {(dateFrom || dateTo) && (

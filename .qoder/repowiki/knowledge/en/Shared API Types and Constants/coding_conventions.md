@@ -1,2 +1,0 @@
-- Uses `as const` objects paired with derived union types (e.g., `typeof ROLES[keyof typeof ROLES]`) to create strict, maintainable enum-like structures.
-- Defines API contracts using explicit Request/Response interface pairs (e.g., `CreateBrandRequest` and `Brand`) to mirror backend Pydantic schemas.

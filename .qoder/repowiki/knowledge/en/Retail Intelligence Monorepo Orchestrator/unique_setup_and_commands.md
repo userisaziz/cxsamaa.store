@@ -1,0 +1,2 @@
+- `./start_servers.sh`: Boots the entire development environment including Docker services, database migrations, FastAPI, Celery, and Next.js.
+- `./seed.sh`: Initializes the database with multi-role test data after ensuring infrastructure readiness.

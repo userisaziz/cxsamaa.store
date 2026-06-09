@@ -3,6 +3,7 @@ import uuid
 from collections import Counter
 from datetime import datetime
 
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,6 +12,7 @@ from src.models.conversation import Conversation, ConversationAnalysis
 from src.models.recording import Recording, RecordingStatus
 from src.models.transcript import TranscriptSegment
 from src.schemas.recording import RecordingResponse, RecordingStatusResponse, RecordingSummaryResponse
+from src.storage.local import get_storage
 
 
 async def list_recordings(
@@ -64,6 +66,89 @@ async def get_recording(db: AsyncSession, recording_id: str) -> Recording | None
         select(Recording).where(Recording.id == uuid.UUID(recording_id))
     )
     return result.scalar_one_or_none()
+
+
+async def get_recording_status(db: AsyncSession, recording_id: str) -> RecordingStatusResponse | None:
+    """Get the status of a recording."""
+    recording = await get_recording(db, recording_id)
+    if not recording:
+        return None
+    return RecordingStatusResponse(
+        id=str(recording.id),
+        status=recording.status.value,
+        error_message=recording.error_message,
+    )
+
+
+async def upload_recording(
+    db: AsyncSession,
+    file: UploadFile,
+    salesperson_id: str,
+    recorded_at: datetime | None = None,
+) -> Recording:
+    """Upload a new recording file and start processing pipeline."""
+    from pathlib import Path
+    
+    # Validate file
+    if not file.filename or not file.content_type:
+        raise ValueError("Invalid file upload")
+    
+    # Read file content
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    
+    # Upload to storage
+    storage = get_storage()
+    file_url = await storage.upload(file_content, unique_filename)
+    
+    # Create recording record
+    recording = Recording(
+        salesperson_id=uuid.UUID(salesperson_id),
+        file_url=file_url,
+        file_size=file_size,
+        duration_seconds=None,  # Will be updated after preprocessing
+        format=file.content_type,
+        status=RecordingStatus.UPLOADED,
+        recorded_at=recorded_at,
+    )
+    db.add(recording)
+    await db.flush()
+    await db.refresh(recording)
+    
+    # Start processing pipeline
+    from src.workers.pipeline import start_processing_pipeline
+    start_processing_pipeline(str(recording.id))
+    
+    return recording
+
+
+async def reprocess_recording(db: AsyncSession, recording: Recording) -> Recording:
+    """Reprocess a recording by restarting the pipeline."""
+    # Only allow reprocessing if recording is in a terminal state
+    if recording.status not in [
+        RecordingStatus.FAILED,
+        RecordingStatus.COMPLETED,
+    ]:
+        raise ValueError(
+            f"Cannot reprocess recording with status {recording.status.value}. "
+            "Only FAILED or COMPLETED recordings can be reprocessed."
+        )
+    
+    # Reset status
+    recording.status = RecordingStatus.UPLOADED
+    recording.error_message = None
+    await db.flush()
+    await db.refresh(recording)
+    
+    # Restart pipeline
+    from src.workers.pipeline import start_processing_pipeline
+    start_processing_pipeline(str(recording.id))
+    
+    return recording
 
 
 async def create_recording(

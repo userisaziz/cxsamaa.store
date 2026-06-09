@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: web_app/app_shell
+title: Root Layout & Entry Routing
+scope:
+    - apps/web/src/app/layout.tsx
+    - apps/web/src/app/page.tsx
+    - apps/web/src/app/globals.css
+source_files: []
+depends_on: []
+related_to:
+    - path: web_app/auth
+    - path: web_app/dashboard_layout

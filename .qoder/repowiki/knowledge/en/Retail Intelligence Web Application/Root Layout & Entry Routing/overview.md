@@ -1,0 +1,1 @@
+Defines the application root layout, global styling, and initial authentication-based routing logic.

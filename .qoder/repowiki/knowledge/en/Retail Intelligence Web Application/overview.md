@@ -1,0 +1,1 @@
+Orchestrates a Next.js-based dashboard for retail audio analytics, unifying authentication, shared UI primitives, and domain-specific views into a cohesive user experience.

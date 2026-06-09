@@ -13,7 +13,11 @@ export default function HomePage() {
   }, [hydrate]);
 
   useEffect(() => {
-    if (!user) return;
+    // Redirect to login if not authenticated
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
 
     // Role-based redirect
     switch (user.role) {
@@ -36,8 +40,11 @@ export default function HomePage() {
   }, [user, router]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-green border-t-transparent" />
+        <p className="text-sm font-medium tracking-wide text-steel">SAMAA</p>
+      </div>
     </div>
   );
 }

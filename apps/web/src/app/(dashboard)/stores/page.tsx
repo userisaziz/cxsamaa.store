@@ -22,10 +22,10 @@ export default function StoresPage() {
   });
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Stores</h1>
-        <p className="text-sm text-steel">Manage retail locations</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Stores</h1>
+        <p className="mt-1 text-sm text-steel">Manage retail locations</p>
       </div>
 
       <Card>
@@ -60,16 +60,16 @@ export default function StoresPage() {
                         {store.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-steel">
                       {store.location || "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-steel">
                       {new Date(store.created_at).toLocaleDateString()}
                     </TableCell>
                   </TableRow>
                 )) ?? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={3} className="text-center text-steel py-12">
                       No stores found
                     </TableCell>
                   </TableRow>

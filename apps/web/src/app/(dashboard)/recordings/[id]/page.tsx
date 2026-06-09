@@ -123,7 +123,7 @@ export default function RecordingDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       {/* Breadcrumbs */}
       <Breadcrumbs
         items={[
@@ -143,10 +143,10 @@ export default function RecordingDetailPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">Recording Detail</h1>
+            <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Recording Detail</h1>
             {recording && <StatusBadge status={recording.status} />}
           </div>
-          <p className="text-sm text-steel">
+          <p className="mt-1 text-sm text-steel">
             {recording && (
               <>
                 {formatDuration(recording.duration_seconds)} · {recording.format}

@@ -18,6 +18,14 @@
 - [PRD.md](file://docs/SAMAA_PRD.md)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Removed advanced transcription, analysis, and CSV export endpoints
+- Simplified API to basic upload, status checking, and reprocessing endpoints
+- Removed complex processing pipeline orchestration
+- Streamlined authentication requirements for basic operations
+- Eliminated transcript, conversation, and summary endpoints
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -31,7 +39,9 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive API documentation for audio recording management. It covers endpoints for uploading audio recordings, tracking processing status, retrieving transcripts and conversations, exporting data, and managing audio files. It specifies HTTP methods, URL patterns, multipart form data handling, validation requirements, processing workflows, status transitions, error handling, and storage considerations.
+This document provides comprehensive API documentation for audio recording management. The API has been simplified to focus on core recording operations: file upload, status tracking, and basic management functions. It covers endpoints for uploading audio recordings, tracking processing status, retrieving recording details, and managing audio files. It specifies HTTP methods, URL patterns, multipart form data handling, validation requirements, processing workflows, status transitions, error handling, and storage considerations.
+
+**Updated** The API has been streamlined from a complex multi-stage processing system to a focused set of basic endpoints for recording management.
 
 ## Project Structure
 The recording management API is implemented as part of the FastAPI backend under `/apps/api/src/api/v1/`. Key components include route handlers, models, schemas, services, workers, and storage abstractions.
@@ -60,10 +70,10 @@ RecordingsAPI --> Pipeline
 
 **Diagram sources**
 - [router.py:1-20](file://apps/api/src/api/v1/router.py#L1-L20)
-- [recordings.py:1-254](file://apps/api/src/api/v1/recordings.py#L1-L254)
+- [recordings.py:1-125](file://apps/api/src/api/v1/recordings.py#L1-L125)
 - [recording.py:1-60](file://apps/api/src/models/recording.py#L1-L60)
 - [recording_schemas.py:1-71](file://apps/api/src/schemas/recording.py#L1-L71)
-- [recording_service.py:1-177](file://apps/api/src/services/recording.py#L1-L177)
+- [recording_service.py:1-262](file://apps/api/src/services/recording.py#L1-L262)
 - [pipeline.py:1-35](file://apps/api/src/workers/pipeline.py#L1-L35)
 - [local_storage.py:1-50](file://apps/api/src/storage/local.py#L1-L50)
 
@@ -72,18 +82,20 @@ RecordingsAPI --> Pipeline
 - [README.md:1-308](file://README.md#L1-L308)
 
 ## Core Components
-- API Router: Exposes endpoints under `/api/v1/recordings` for upload, listing, status, transcripts, conversations, summaries, and reprocessing.
-- Models: Define the recording lifecycle, transcript segments, and conversations with associated analysis.
+- API Router: Exposes endpoints under `/api/v1/recordings` for upload, listing, and status checking.
+- Models: Define the recording lifecycle and basic metadata storage.
 - Schemas: Pydantic models for request/response validation and serialization.
-- Services: Encapsulate business logic for listing, creating, updating status, and summarizing recordings.
+- Services: Encapsulate business logic for listing, creating, and updating recording status.
 - Workers/Pipeline: Orchestrates asynchronous processing stages via Celery.
 - Storage: Provides local file storage abstraction for uploaded audio.
 
+**Updated** The API now focuses on essential recording management functions, removing advanced transcription and analysis capabilities.
+
 **Section sources**
-- [recordings.py:1-254](file://apps/api/src/api/v1/recordings.py#L1-L254)
+- [recordings.py:1-125](file://apps/api/src/api/v1/recordings.py#L1-L125)
 - [recording.py:1-60](file://apps/api/src/models/recording.py#L1-L60)
 - [recording_schemas.py:1-71](file://apps/api/src/schemas/recording.py#L1-L71)
-- [recording_service.py:1-177](file://apps/api/src/services/recording.py#L1-L177)
+- [recording_service.py:1-262](file://apps/api/src/services/recording.py#L1-L262)
 - [pipeline.py:1-35](file://apps/api/src/workers/pipeline.py#L1-L35)
 - [local_storage.py:1-50](file://apps/api/src/storage/local.py#L1-L50)
 
@@ -115,8 +127,8 @@ API-->>Client : "201 Created + RecordingResponse"
 ```
 
 **Diagram sources**
-- [recordings.py:110-167](file://apps/api/src/api/v1/recordings.py#L110-L167)
-- [recording_service.py:69-90](file://apps/api/src/services/recording.py#L69-L90)
+- [recordings.py:56-84](file://apps/api/src/api/v1/recordings.py#L56-L84)
+- [recording_service.py:83-126](file://apps/api/src/services/recording.py#L83-L126)
 - [local_storage.py:14-32](file://apps/api/src/storage/local.py#L14-L32)
 - [pipeline.py:12-34](file://apps/api/src/workers/pipeline.py#L12-L34)
 
@@ -142,8 +154,10 @@ API-->>Client : "201 Created + RecordingResponse"
   - Enqueues Celery pipeline; if Redis/Celery is unavailable, recording remains UPLOADED
 - Response: RecordingResponse
 
+**Updated** Simplified from previous version with basic upload functionality only.
+
 **Section sources**
-- [recordings.py:110-167](file://apps/api/src/api/v1/recordings.py#L110-L167)
+- [recordings.py:56-84](file://apps/api/src/api/v1/recordings.py#L56-L84)
 - [recordings.py:35-36](file://apps/api/src/api/v1/recordings.py#L35-L36)
 
 #### List Recordings
@@ -159,8 +173,8 @@ API-->>Client : "201 Created + RecordingResponse"
 - Response: PaginatedRecordingsResponse
 
 **Section sources**
-- [recordings.py:41-73](file://apps/api/src/api/v1/recordings.py#L41-L73)
-- [recording_service.py:16-59](file://apps/api/src/services/recording.py#L16-L59)
+- [recordings.py:21-53](file://apps/api/src/api/v1/recordings.py#L21-L53)
+- [recording_service.py:18-61](file://apps/api/src/services/recording.py#L18-L61)
 
 #### Get Recording Detail
 - Method: GET
@@ -170,8 +184,8 @@ API-->>Client : "201 Created + RecordingResponse"
 - Response: RecordingResponse
 
 **Section sources**
-- [recordings.py:170-179](file://apps/api/src/api/v1/recordings.py#L170-L179)
-- [recording_service.py:62-66](file://apps/api/src/services/recording.py#L62-L66)
+- [recordings.py:86-95](file://apps/api/src/api/v1/recordings.py#L86-L95)
+- [recording_service.py:64-68](file://apps/api/src/services/recording.py#L64-L68)
 
 #### Get Recording Status
 - Method: GET
@@ -181,40 +195,7 @@ API-->>Client : "201 Created + RecordingResponse"
 - Response: RecordingStatusResponse
 
 **Section sources**
-- [recordings.py:182-195](file://apps/api/src/api/v1/recordings.py#L182-L195)
-
-#### Get Transcript
-- Method: GET
-- URL: `/api/v1/recordings/{recording_id}/transcript`
-- Path parameter:
-  - `recording_id`: UUID
-- Response: array of TranscriptSegmentResponse
-
-**Section sources**
-- [recordings.py:198-204](file://apps/api/src/api/v1/recordings.py#L198-L204)
-- [recording_service.py:107-113](file://apps/api/src/services/recording.py#L107-L113)
-
-#### Get Conversations
-- Method: GET
-- URL: `/api/v1/recordings/{recording_id}/conversations`
-- Path parameter:
-  - `recording_id`: UUID
-- Response: array of ConversationSummaryResponse
-
-**Section sources**
-- [recordings.py:207-213](file://apps/api/src/api/v1/recordings.py#L207-L213)
-- [recording_service.py:116-122](file://apps/api/src/services/recording.py#L116-L122)
-
-#### Get Recording Summary
-- Method: GET
-- URL: `/api/v1/recordings/{recording_id}/summary`
-- Path parameter:
-  - `recording_id`: UUID
-- Response: RecordingSummaryResponse
-
-**Section sources**
-- [recordings.py:216-225](file://apps/api/src/api/v1/recordings.py#L216-L225)
-- [recording_service.py:125-176](file://apps/api/src/services/recording.py#L125-L176)
+- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
 
 #### Reprocess Recording
 - Method: POST
@@ -227,31 +208,7 @@ API-->>Client : "201 Created + RecordingResponse"
 - Response: RecordingResponse
 
 **Section sources**
-- [recordings.py:228-253](file://apps/api/src/api/v1/recordings.py#L228-L253)
-
-#### Export Recordings CSV
-- Method: GET
-- URL: `/api/v1/recordings/export/recordings`
-- Query parameters:
-  - `salesperson_id`: optional UUID filter
-  - `status`: optional status filter
-- Response: text/csv stream
-
-**Section sources**
-- [recordings.py:76-89](file://apps/api/src/api/v1/recordings.py#L76-L89)
-- [export_service.py:15-46](file://apps/api/src/services/export.py#L15-L46)
-
-#### Export Conversations CSV
-- Method: GET
-- URL: `/api/v1/recordings/export/conversations`
-- Query parameters:
-  - `recording_id`: optional UUID filter
-  - `salesperson_id`: optional UUID filter
-- Response: text/csv stream
-
-**Section sources**
-- [recordings.py:92-107](file://apps/api/src/api/v1/recordings.py#L92-L107)
-- [export_service.py:49-99](file://apps/api/src/services/export.py#L49-L99)
+- [recordings.py:110-125](file://apps/api/src/api/v1/recordings.py#L110-L125)
 
 ### Data Models and Schemas
 
@@ -357,26 +314,10 @@ SCORING --> FAILED : "error"
 - [config.py:24-26](file://apps/api/src/config.py#L24-L26)
 
 ### Quality Assessment Endpoints
-- Recording summary endpoint aggregates conversation-level analysis to compute:
-  - Top intent and top objection
-  - Missed opportunities (count of "LOST" outcomes)
-  - Outcome distribution
-  - Average confidence
-- Transcript segments include embeddings for vector search capabilities
-
-**Section sources**
-- [recordings.py:216-225](file://apps/api/src/api/v1/recordings.py#L216-L225)
-- [recording_service.py:125-176](file://apps/api/src/services/recording.py#L125-L176)
-- [transcript.py:10-26](file://apps/api/src/models/transcript.py#L10-L26)
+**Updated** Removed quality assessment endpoints as they are no longer part of the simplified API.
 
 ### Batch Operations
-- Export endpoints support filtering by salesperson and status to enable batch retrieval of analytics for reporting and compliance.
-
-**Section sources**
-- [recordings.py:76-89](file://apps/api/src/api/v1/recordings.py#L76-L89)
-- [recordings.py:92-107](file://apps/api/src/api/v1/recordings.py#L92-L107)
-- [export_service.py:15-46](file://apps/api/src/services/export.py#L15-L46)
-- [export_service.py:49-99](file://apps/api/src/services/export.py#L49-L99)
+**Updated** Removed export endpoints as they are no longer part of the simplified API.
 
 ## Dependency Analysis
 
@@ -407,11 +348,10 @@ Handler --> Pipeline
 
 ## Performance Considerations
 - Asynchronous processing: Upload returns immediately while long-running pipeline executes in Celery workers.
-- Streaming responses: CSV export endpoints stream results to reduce memory overhead.
 - Pagination: Listing endpoints support pagination to limit response sizes.
 - Embeddings: Transcript segments include vector embeddings for efficient semantic search.
 
-[No sources needed since this section provides general guidance]
+**Updated** Removed streaming responses and export capabilities as they are no longer part of the simplified API.
 
 ## Troubleshooting Guide
 - Upload failures:
@@ -422,20 +362,19 @@ Handler --> Pipeline
   - Use `/recordings/{id}/status` to track progress; status transitions are defined in RecordingStatus
 - Re-processing:
   - Use `/recordings/{id}/reprocess` to restart pipeline for failed or stale recordings
-- Export issues:
-  - Ensure filters match existing records; CSV export streams results for large datasets
+
+**Updated** Removed export-related troubleshooting as CSV export functionality has been removed.
 
 **Section sources**
-- [recordings.py:118-138](file://apps/api/src/api/v1/recordings.py#L118-L138)
-- [recordings.py:160-167](file://apps/api/src/api/v1/recordings.py#L160-L167)
-- [recordings.py:188-195](file://apps/api/src/api/v1/recordings.py#L188-L195)
-- [recordings.py:228-253](file://apps/api/src/api/v1/recordings.py#L228-L253)
+- [recordings.py:64-84](file://apps/api/src/api/v1/recordings.py#L64-L84)
+- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
+- [recordings.py:110-125](file://apps/api/src/api/v1/recordings.py#L110-L125)
 - [recording.py:12-22](file://apps/api/src/models/recording.py#L12-L22)
 
 ## Conclusion
-The Recording Management API provides a robust foundation for audio ingestion, asynchronous processing, and analytics retrieval. It enforces strict validation, offers flexible filtering and export capabilities, and integrates seamlessly with a multi-stage AI pipeline. The documented endpoints, schemas, and workflows enable reliable integration for upload, monitoring, and reporting.
+The Recording Management API provides a streamlined foundation for audio ingestion and basic management. It enforces strict validation, offers flexible filtering capabilities, and integrates seamlessly with a multi-stage AI pipeline. The simplified endpoints, schemas, and workflows enable reliable integration for upload, monitoring, and basic status tracking.
 
-[No sources needed since this section summarizes without analyzing specific files]
+**Updated** The API has been successfully simplified to focus on essential recording management functions while maintaining robust processing capabilities.
 
 ## Appendices
 
@@ -451,15 +390,8 @@ The Recording Management API provides a robust foundation for audio ingestion, a
 - After upload, poll `/api/v1/recordings/{id}/status` to monitor status transitions until completion or failure.
 
 **Section sources**
-- [recordings.py:182-195](file://apps/api/src/api/v1/recordings.py#L182-L195)
+- [recordings.py:98-107](file://apps/api/src/api/v1/recordings.py#L98-L107)
 - [recording.py:12-22](file://apps/api/src/models/recording.py#L12-L22)
 
 ### Batch Operations Examples
-- Export recordings filtered by salesperson and status
-- Export conversations filtered by recording or salesperson
-
-**Section sources**
-- [recordings.py:76-89](file://apps/api/src/api/v1/recordings.py#L76-L89)
-- [recordings.py:92-107](file://apps/api/src/api/v1/recordings.py#L92-L107)
-- [export_service.py:15-46](file://apps/api/src/services/export.py#L15-L46)
-- [export_service.py:49-99](file://apps/api/src/services/export.py#L49-L99)
+**Updated** Removed batch operations examples as CSV export functionality has been removed from the simplified API.

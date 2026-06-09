@@ -1,4 +1,0 @@
-- Uses Next.js App Router with route groups (`(auth)`, `(dashboard)`) to structurally separate public login flows from protected dashboard views.
-- Enforces client-side authentication via a centralized `AuthGuard` and `middleware.ts` that bypasses server-side checks in favor of client-side token validation.
-- Centralizes data fetching and JWT refresh logic in a shared `api-client` utility, ensuring consistent error handling and session persistence across all dashboard modules.
-- Composes the application shell using a root `Providers` component that wraps layout and feature-specific components, enabling consistent state management and UI theming.

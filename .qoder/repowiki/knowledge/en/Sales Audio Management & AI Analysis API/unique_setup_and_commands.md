@@ -1,4 +1,3 @@
-- **Environment**: Requires a `.env` file for `DATABASE_URL`, `REDIS_URL`, and `NVIDIA_API_KEY`.
-- **Database**: Run `alembic upgrade head` to apply schema migrations.
-- **Workers**: Start the async worker pool with `celery -A src.workers.celery_app worker --loglevel=info`.
-- **Seeding**: Use `python scripts/seed.py` to populate initial reference data.
+- Use `uv` for dependency management as indicated by `uv.lock` and `.python-version`.
+- Run database migrations via `alembic upgrade head` using the configuration in `alembic.ini`.
+- Start the API server with `uvicorn src.main:app` and the worker process with `celery -A src.workers.celery_app worker`.

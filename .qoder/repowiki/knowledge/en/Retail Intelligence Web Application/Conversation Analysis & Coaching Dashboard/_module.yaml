@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: web_app/dashboard_conversations
+title: Conversation Analysis & Coaching Dashboard
+scope:
+    - apps/web/src/app/(dashboard)/recordings/
+    - apps/web/src/app/(dashboard)/coaching/
+    - apps/web/src/components/features/
+source_files: []
+depends_on: []
+related_to:
+    - path: web_app/dashboard_management
+    - path: web_app/shared_ui_lib
+    - path: api_service

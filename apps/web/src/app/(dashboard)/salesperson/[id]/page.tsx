@@ -123,7 +123,7 @@ export default function SalespersonDetailPage() {
   const conversionRate = performance?.conversion_rate;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       {/* Breadcrumbs */}
       <Breadcrumbs
         items={[
@@ -141,10 +141,10 @@ export default function SalespersonDetailPage() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">
             {salesperson?.name || "Salesperson"}
           </h1>
-          <p className="text-sm text-steel">
+          <p className="mt-1 text-sm text-steel">
             {[salesperson?.role, salesperson?.shift, salesperson?.email]
               .filter(Boolean)
               .join(" · ") || "Sales team member"}
@@ -155,10 +155,10 @@ export default function SalespersonDetailPage() {
             variant="outline"
             className={`text-lg px-4 py-2 font-bold ${
               overallScore >= 80
-                ? "border-green-200 text-green-700 bg-green-50"
+                ? "border-brand-green/30 text-brand-green-deep bg-brand-green-soft"
                 : overallScore >= 60
-                ? "border-amber-200 text-amber-700 bg-amber-50"
-                : "border-red-200 text-red-700 bg-red-50"
+                ? "border-brand-warn/30 text-amber-700 bg-amber-50"
+                : "border-brand-error/20 text-destructive bg-destructive/10"
             }`}
           >
             {overallScore.toFixed(0)} / 100
@@ -219,11 +219,11 @@ export default function SalespersonDetailPage() {
                           <div
                             className={`h-full rounded-full transition-all ${
                               score != null && score >= 80
-                                ? "bg-green-500"
+                                ? "bg-brand-green"
                                 : score != null && score >= 60
-                                ? "bg-amber-500"
+                                ? "bg-brand-warn"
                                 : score != null
-                                ? "bg-red-400"
+                                ? "bg-brand-error"
                                 : "bg-muted"
                             }`}
                             style={{ width: `${score ?? 0}%` }}

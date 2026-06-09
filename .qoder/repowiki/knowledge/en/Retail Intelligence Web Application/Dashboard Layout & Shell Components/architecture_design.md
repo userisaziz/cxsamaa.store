@@ -1,0 +1,4 @@
+- Entry point: `apps/web/src/app/(dashboard)/layout.tsx` defines the client-side dashboard shell, wrapping content in `AuthGuard` and rendering a fixed `Sidebar` alongside a scrollable main area.
+- Navigation layer: `components/layout/sidebar.tsx` implements role-filtered navigation for standard users (Brand/Store/Salesperson), while `components/layout/operations-sidebar.tsx` provides a specialized layout for operations tasks.
+- UI Primitives: `kpi-card.tsx`, `status-badge.tsx`, and `loading-skeleton.tsx` serve as presentational components for data visualization and feedback, decoupled from specific page logic.
+- Dependency direction: Layouts depend on `AuthGuard` for session enforcement and `useAuthStore` for user context, while UI primitives rely on shared design system components (`@/components/ui/*`).

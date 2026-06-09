@@ -1,0 +1,17 @@
+schema_version: 1
+module_path: ""
+title: Retail Intelligence Monorepo Orchestrator
+scope:
+    - .env
+    - .env.example
+    - .gitignore
+    - README.md
+    - docker-compose.yml
+    - package-lock.json
+    - package.json
+    - seed.sh
+    - start_servers.sh
+    - turbo.json
+source_files: []
+depends_on: []
+related_to: []

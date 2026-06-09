@@ -1,3 +1,0 @@
-- Route protection is handled client-side using an `AuthGuard` wrapper rather than server-side middleware redirects.
-- API interactions use a centralized typed client with automatic JWT refresh and localStorage-based session persistence.
-- UI components are structured into `ui` (primitives), `layout` (shell elements), and `features` (domain-specific widgets) directories.

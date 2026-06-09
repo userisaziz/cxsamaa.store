@@ -1,4 +1,0 @@
-- Uses Turborepo for task orchestration, enforcing build dependencies where the web app depends on the shared package's build output.
-- Manages cross-service infrastructure via a root-level `docker-compose.yml` that provisions PostgreSQL and Redis for the API service.
-- Provides a unified `start_servers.sh` script that coordinates the lifecycle of Docker containers, database migrations, the Python async worker, and the Node.js frontend.
-- Centralizes environment configuration in a root `.env` file, which is symlinked into the API service to ensure consistent runtime settings across the stack.

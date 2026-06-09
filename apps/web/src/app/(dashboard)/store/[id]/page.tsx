@@ -73,7 +73,7 @@ export default function StoreDashboardPage() {
   const topObjection = "—";
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       {/* Breadcrumbs */}
       <Breadcrumbs
         items={[
@@ -83,8 +83,8 @@ export default function StoreDashboardPage() {
 
       {/* Store Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">{store?.name || "Store"}</h1>
-        <p className="text-sm text-steel">{store?.location || ""}</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">{store?.name || "Store"}</h1>
+        <p className="mt-1 text-sm text-steel">{store?.location || ""}</p>
       </div>
 
       {/* KPI Cards */}
@@ -144,24 +144,24 @@ export default function StoreDashboardPage() {
                         {sp.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{sp.role || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{sp.shift || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.role || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.shift || "—"}</TableCell>
                     <TableCell className="text-right">
                       {perf?.avg_overall_score != null ? (
                         <Badge
                           variant="outline"
                           className={
                             perf.avg_overall_score >= 80
-                              ? "border-green-200 text-green-700 bg-green-50"
+                              ? "border-brand-green/30 text-brand-green-deep bg-brand-green-soft"
                               : perf.avg_overall_score >= 60
-                              ? "border-amber-200 text-amber-700 bg-amber-50"
-                              : "border-red-200 text-red-700 bg-red-50"
+                              ? "border-brand-warn/30 text-amber-700 bg-amber-50"
+                              : "border-brand-error/20 text-destructive bg-destructive/10"
                           }
                         >
                           {perf.avg_overall_score.toFixed(0)}
                         </Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-steel">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -171,7 +171,7 @@ export default function StoreDashboardPage() {
                 );
               }) ?? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-steel py-12">
                     No salespeople found
                   </TableCell>
                 </TableRow>

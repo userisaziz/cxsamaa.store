@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: shared_package
+title: Shared Type Definitions & Constants
+scope:
+    - packages/shared/
+source_files: []
+depends_on: []
+related_to:
+    - path: api_service
+    - path: web_app

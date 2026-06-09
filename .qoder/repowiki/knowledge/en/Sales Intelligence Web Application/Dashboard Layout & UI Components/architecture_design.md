@@ -1,4 +1,0 @@
-- Entry point: `apps/web/src/app/(dashboard)/layout.tsx` defines the client-side dashboard shell, wrapping content in an `AuthGuard` and arranging the `Sidebar` alongside a scrollable main area.
-- Navigation: `apps/web/src/components/layout/sidebar.tsx` implements role-based filtering of navigation items using `useAuthStore`, integrating `next/navigation` for routing and active state management.
-- Presentational Components: `kpi-card.tsx`, `status-badge.tsx`, and `loading-skeleton.tsx` are stateless or minimally stateful UI elements designed for composition within dashboard pages, leveraging shared UI primitives from `@/components/ui`.
-- Dependency Direction: Layout and components depend on shared UI libraries (`lucide-react`, `@/components/ui`) and state stores (`@/store/auth`), but do not contain business logic or data fetching themselves.

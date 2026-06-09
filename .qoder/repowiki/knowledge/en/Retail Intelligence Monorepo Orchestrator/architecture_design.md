@@ -1,0 +1,3 @@
+- Uses Turborepo to manage build dependencies and task caching across the web application and shared packages.
+- Provisions shared infrastructure (PostgreSQL with pgvector, Redis) via Docker Compose for both the Python API and frontend persistence needs.
+- Provides unified lifecycle scripts (`start_servers.sh`, `seed.sh`) that orchestrate database migrations, environment synchronization, and concurrent service startup for the full stack.

@@ -6,6 +6,7 @@
 - [apps/api/src/database.py](file://apps/api/src/database.py)
 - [apps/api/alembic/env.py](file://apps/api/alembic/env.py)
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py)
 - [apps/api/scripts/seed.py](file://apps/api/scripts/seed.py)
 - [apps/api/src/models/__init__.py](file://apps/api/src/models/__init__.py)
 - [apps/api/src/models/user.py](file://apps/api/src/models/user.py)
@@ -18,26 +19,36 @@
 - [apps/api/src/models/metrics.py](file://apps/api/src/models/metrics.py)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated initial schema documentation to reflect the new comprehensive database structure
+- Added detailed coverage of all 8 core tables in the initial migration
+- Enhanced model relationships documentation with specific foreign key constraints
+- Expanded metrics table documentation including daily and weekly analytics
+- Updated seed data documentation with realistic test data structure
+- Enhanced troubleshooting section with vector embedding considerations
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Initial Database Schema](#initial-database-schema)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
+11. [Appendices](#appendices)
 
 ## Introduction
-This document explains database operations and migration management in the Xsamaa AI Pipeline API service. It covers Alembic configuration, database connection settings, migration repository structure, and version control strategies. It also documents the migration workflow from schema changes to database updates, dependency management, rollback procedures, and the relationship between SQLAlchemy models and Alembic revisions. Guidance is included for automatic migration generation, manual customization, database initialization, seed data loading, environment-specific configuration, best practices for schema evolution and production deployments, and troubleshooting common migration issues.
+This document explains database operations and migration management in the Xsamaa AI Pipeline API service. It covers Alembic configuration, database connection settings, migration repository structure, and version control strategies. The system now includes a comprehensive initial schema supporting operations management with brands, stores, salespeople, users, recordings, conversations, transcript segments, and conversation analysis tables. It documents the migration workflow from schema changes to database updates, dependency management, rollback procedures, and the relationship between SQLAlchemy models and Alembic revisions. Guidance is included for automatic migration generation, manual customization, database initialization, seed data loading, environment-specific configuration, best practices for schema evolution and production deployments, and troubleshooting common migration issues.
 
 ## Project Structure
-The database and migrations are centered under the API application:
+The database and migrations are centered under the API application with a comprehensive initial schema:
 - Alembic configuration and runtime environment live under apps/api/alembic/.
 - Application settings and database engine/session are defined under apps/api/src/.
-- SQLAlchemy models are defined under apps/api/src/models/.
+- SQLAlchemy models are defined under apps/api/src/models/ with 8 core entities.
 - Seed script for initializing and seeding the database is under apps/api/scripts/.
 
 ```mermaid
@@ -48,12 +59,14 @@ DB["Database Engine & Session<br/>apps/api/src/database.py"]
 MODELS["SQLAlchemy Models<br/>apps/api/src/models/*"]
 ALEMBIC_INI["Alembic Config<br/>apps/api/alembic.ini"]
 ALEMBIC_ENV["Alembic Env<br/>apps/api/alembic/env.py"]
+INITIAL_MIGRATION["Initial Schema<br/>apps/api/alembic/versions/14cdd47b97b4_initial_schema.py"]
 SEED["Seed Script<br/>apps/api/scripts/seed.py"]
 end
 CFG --> DB
 DB --> MODELS
 ALEMBIC_INI --> ALEMBIC_ENV
 ALEMBIC_ENV --> MODELS
+ALEMBIC_ENV --> INITIAL_MIGRATION
 SEED --> DB
 SEED --> MODELS
 ```
@@ -63,14 +76,16 @@ SEED --> MODELS
 - [apps/api/src/database.py:1-34](file://apps/api/src/database.py#L1-L34)
 - [apps/api/alembic.ini:1-151](file://apps/api/alembic.ini#L1-L151)
 - [apps/api/alembic/env.py:1-73](file://apps/api/alembic/env.py#L1-L73)
-- [apps/api/scripts/seed.py:1-121](file://apps/api/scripts/seed.py#L1-L121)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:1-178](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L1-L178)
+- [apps/api/scripts/seed.py:1-132](file://apps/api/scripts/seed.py#L1-L132)
 
 **Section sources**
 - [apps/api/src/config.py:1-52](file://apps/api/src/config.py#L1-L52)
 - [apps/api/src/database.py:1-34](file://apps/api/src/database.py#L1-L34)
 - [apps/api/alembic.ini:1-151](file://apps/api/alembic.ini#L1-L151)
 - [apps/api/alembic/env.py:1-73](file://apps/api/alembic/env.py#L1-L73)
-- [apps/api/scripts/seed.py:1-121](file://apps/api/scripts/seed.py#L1-L121)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:1-178](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L1-L178)
+- [apps/api/scripts/seed.py:1-132](file://apps/api/scripts/seed.py#L1-L132)
 
 ## Core Components
 - Settings and database URLs:
@@ -81,6 +96,8 @@ SEED --> MODELS
 - Alembic configuration:
   - Alembic reads script_location and logging from alembic.ini.
   - env.py sets the SQLAlchemy URL dynamically from settings and imports all models to ensure detection.
+- Initial schema migration:
+  - The first migration establishes 8 core tables with proper foreign key relationships and indexes.
 - Models:
   - SQLAlchemy declarative base is used across models; relationships and indexes are defined consistently.
 - Seed script:
@@ -93,11 +110,12 @@ SEED --> MODELS
 - [apps/api/alembic.ini:8](file://apps/api/alembic.ini#L8)
 - [apps/api/alembic/env.py:27](file://apps/api/alembic/env.py#L27)
 - [apps/api/alembic/env.py:29](file://apps/api/alembic/env.py#L29)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:22-157](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L22-L157)
 - [apps/api/scripts/seed.py:21-27](file://apps/api/scripts/seed.py#L21-L27)
 - [apps/api/scripts/seed.py:28-107](file://apps/api/scripts/seed.py#L28-L107)
 
 ## Architecture Overview
-The migration architecture integrates application settings, SQLAlchemy models, and Alembic runtime. The flow supports offline and online modes, with dynamic URL resolution and model discovery.
+The migration architecture integrates application settings, SQLAlchemy models, and Alembic runtime. The flow supports offline and online modes, with dynamic URL resolution and model discovery. The initial schema establishes a complete operations foundation with proper entity relationships and indexing strategy.
 
 ```mermaid
 sequenceDiagram
@@ -112,8 +130,8 @@ CLI->>ENV : Run migrations
 ENV->>SETTINGS : Read database_url and database_url_sync
 ENV->>DB : Configure async/sync engine
 ENV->>MODELS : Import models for metadata discovery
-ENV->>DB : Connect and run migrations
-DB-->>CLI : Apply or check revisions
+ENV->>DB : Connect and run initial migration
+DB-->>CLI : Create 8 core tables with relationships
 ```
 
 **Diagram sources**
@@ -197,7 +215,7 @@ DatabaseEngine --> SessionManager : "creates factory"
 - Base class:
   - Declarative base used across models.
 - Model imports:
-  - env.py imports all models to ensure Alembic’s target_metadata includes them.
+  - env.py imports all models to ensure Alembic's target_metadata includes them.
 - Model coverage:
   - Users, Brands, Stores, Salespeople, Recordings, Conversations, Transcript segments, and Metrics are defined with relationships and indexes.
 
@@ -248,7 +266,7 @@ Base <|-- WeeklyMetrics
   - Offline mode uses the configured sqlalchemy.url.
   - Online mode creates an async engine from settings and runs migrations synchronously inside an async context.
 - Version locations:
-  - The versions directory is used for stored revision files.
+  - The versions directory contains the initial schema migration.
 
 ```mermaid
 sequenceDiagram
@@ -256,11 +274,10 @@ participant Dev as "Developer"
 participant Alembic as "Alembic CLI"
 participant Env as "env.py"
 participant DB as "Database"
-Dev->>Alembic : Revision (autogenerate or edit)
-Dev->>Alembic : Upgrade/downgrade
+Dev->>Alembic : Upgrade (apply initial schema)
 Alembic->>Env : Resolve target_metadata and URL
-Env->>DB : Connect and run migrations
-DB-->>Alembic : Status updated
+Env->>DB : Connect and run initial migration
+DB-->>Alembic : Create 8 core tables with relationships
 ```
 
 **Diagram sources**
@@ -286,13 +303,11 @@ DB-->>Alembic : Status updated
 
 ### Rollback Procedures
 - Downgrade:
-  - Alembic downgrade commands move to previous revisions.
+  - Alembic downgrade commands move to previous revisions, removing tables in reverse dependency order.
 - Safety:
   - Use explicit revision identifiers and test rollbacks in staging environments.
 - Data safety:
   - Prefer reversible operations and backup before production rollbacks.
-
-[No sources needed since this section provides general guidance]
 
 ### Database Initialization and Seed Data Loading
 - Initialization:
@@ -332,15 +347,103 @@ Commit --> End
 - [apps/api/src/config.py:11-14](file://apps/api/src/config.py#L11-L14)
 - [apps/api/src/config.py:38-48](file://apps/api/src/config.py#L38-L48)
 
-### Best Practices for Schema Evolution and Production Deployment
-- Keep migrations reversible where possible.
-- Test migrations in staging with backups.
-- Use explicit revision identifiers for rollbacks.
-- Avoid long-running transactions in migrations.
-- Add indexes and constraints explicitly in migrations.
-- Document breaking changes and deprecations.
+## Initial Database Schema
 
-[No sources needed since this section provides general guidance]
+### Core Entity Tables
+The initial migration establishes eight fundamental tables forming the operations system foundation:
+
+#### Brands Table
+- Purpose: Central organizational entity for retail chains
+- Primary Keys: UUID id
+- Key Fields: name (255 chars), description (1000 chars), timestamps
+- Relationships: One-to-many with stores, users
+- Indexes: Primary key index
+
+#### Stores Table
+- Purpose: Physical locations within brands
+- Primary Keys: UUID id
+- Foreign Keys: brand_id → brands.id
+- Key Fields: name (255 chars), location (500 chars), working_hours (JSONB)
+- Relationships: Many-to-one with brand, one-to-many with salespeople/users
+- Indexes: brand_id foreign key index, primary key index
+
+#### Salespeople Table
+- Purpose: Individual sales team members
+- Primary Keys: UUID id
+- Foreign Keys: store_id → stores.id
+- Key Fields: name (255 chars), email (255 chars), role (100 chars), shift (50 chars)
+- Relationships: Many-to-one with store, one-to-many with recordings
+- Indexes: store_id foreign key index, primary key index
+
+#### Users Table
+- Purpose: System users with role-based access control
+- Primary Keys: UUID id
+- Foreign Keys: brand_id → brands.id, store_id → stores.id
+- Key Fields: email (unique), password_hash (255 chars), full_name (255 chars), role (enum)
+- Relationships: Many-to-one with brand/store
+- Indexes: email unique index, brand_id/store_id foreign key indexes
+
+#### Recordings Table
+- Purpose: Audio/video recordings of customer interactions
+- Primary Keys: UUID id
+- Foreign Keys: salesperson_id → salespeople.id
+- Key Fields: file_url (text), file_size, duration_seconds, format (10 chars)
+- Status Enum: UPLOADED, PREPROCESSING, TRANSCRIBING, DIARIZING, SEGMENTING, ANALYZING, SCORING, COMPLETED, FAILED
+- Relationships: Many-to-one with salesperson, one-to-many with transcript_segments/conversations
+- Indexes: salesperson_id foreign key index, primary key index
+
+#### Conversations Table
+- Purpose: Segmented conversations extracted from recordings
+- Primary Keys: UUID id
+- Foreign Keys: recording_id → recordings.id
+- Key Fields: start_time, end_time, segment_count
+- Relationships: Many-to-one with recording, one-to-one with conversation_analysis
+- Indexes: recording_id foreign key index, primary key index
+
+#### Transcript Segments Table
+- Purpose: Individual speaker segments with vector embeddings
+- Primary Keys: UUID id
+- Foreign Keys: recording_id → recordings.id
+- Key Fields: speaker_label (20 chars), timestamps, text (text), embedding (Vector 768)
+- Relationships: Many-to-one with recording
+- Indexes: recording_id foreign key index, primary key index
+
+#### Conversation Analysis Table
+- Purpose: AI-powered insights and analytics for conversations
+- Primary Keys: UUID id (unique constraint on conversation_id)
+- Foreign Keys: conversation_id → conversations.id
+- Key Fields: intent (text), products/objections/competitors (JSONB arrays), budget (100 chars)
+- Additional Fields: closing_attempt (boolean), outcome (50 chars), confidence (integer)
+- Relationships: One-to-one with conversation
+- Indexes: unique conversation_id index, primary key index
+
+### Metrics Tables
+Two specialized analytics tables for operational insights:
+
+#### Daily Metrics Table
+- Purpose: Daily operational metrics aggregation
+- Primary Keys: UUID id
+- Unique Constraints: (entity_id, entity_type, date)
+- Key Fields: entity_id, entity_type (20 chars), date, conversation_count, avg_score, conversion_rate
+- Indexes: entity_id index
+
+#### Weekly Metrics Table
+- Purpose: Weekly operational metrics aggregation
+- Primary Keys: UUID id
+- Unique Constraints: (entity_id, entity_type, week_start)
+- Key Fields: entity_id, entity_type (20 chars), week_start, conversation_count, avg_score, conversion_rate, top_objection (500 chars)
+- Indexes: entity_id index
+
+**Section sources**
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:25-156](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L25-L156)
+- [apps/api/src/models/brand.py:10-26](file://apps/api/src/models/brand.py#L10-L26)
+- [apps/api/src/models/store.py:11-32](file://apps/api/src/models/store.py#L11-L32)
+- [apps/api/src/models/salesperson.py:10-32](file://apps/api/src/models/salesperson.py#L10-L32)
+- [apps/api/src/models/user.py:20-49](file://apps/api/src/models/user.py#L20-L49)
+- [apps/api/src/models/recording.py:24-60](file://apps/api/src/models/recording.py#L24-L60)
+- [apps/api/src/models/conversation.py:11-61](file://apps/api/src/models/conversation.py#L11-L61)
+- [apps/api/src/models/transcript.py:10-27](file://apps/api/src/models/transcript.py#L10-L27)
+- [apps/api/src/models/metrics.py:10-39](file://apps/api/src/models/metrics.py#L10-L39)
 
 ## Dependency Analysis
 The following diagram shows how Alembic depends on settings and models, and how the application database layer depends on settings.
@@ -350,7 +453,8 @@ graph LR
 Settings["Settings<br/>apps/api/src/config.py"] --> DB["Database Engine<br/>apps/api/src/database.py"]
 Settings --> AlembicEnv["Alembic Env<br/>apps/api/alembic/env.py"]
 Models["Models<br/>apps/api/src/models/*"] --> AlembicEnv
-AlembicEnv --> Versions["Versions<br/>apps/api/alembic/versions/*"]
+AlembicEnv --> InitialMigration["Initial Schema<br/>14cdd47b97b4"]
+InitialMigration --> CoreTables["8 Core Tables<br/>brands, stores, salespeople, users, recordings, conversations, transcript_segments, conversation_analysis"]
 ```
 
 **Diagram sources**
@@ -358,6 +462,7 @@ AlembicEnv --> Versions["Versions<br/>apps/api/alembic/versions/*"]
 - [apps/api/src/database.py:8-19](file://apps/api/src/database.py#L8-L19)
 - [apps/api/alembic/env.py:12-21](file://apps/api/alembic/env.py#L12-L21)
 - [apps/api/alembic/env.py:27-30](file://apps/api/alembic/env.py#L27-L30)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:22-157](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L22-L157)
 
 **Section sources**
 - [apps/api/src/config.py:11-14](file://apps/api/src/config.py#L11-L14)
@@ -371,11 +476,11 @@ AlembicEnv --> Versions["Versions<br/>apps/api/alembic/versions/*"]
 - Asynchronous operations:
   - Use async sessions for I/O-bound workloads.
 - Indexes and constraints:
-  - Add appropriate indexes and unique constraints to reduce query times.
+  - Appropriate indexes on foreign keys and frequently queried columns.
 - Migration performance:
-  - Batch DDL statements and avoid long-running migrations.
-
-[No sources needed since this section provides general guidance]
+  - Initial schema creation is optimized for sequential table creation.
+- Vector embeddings:
+  - Proper indexing and dimension management for pgvector embeddings.
 
 ## Troubleshooting Guide
 - Migration fails due to missing pgvector:
@@ -389,13 +494,20 @@ AlembicEnv --> Versions["Versions<br/>apps/api/alembic/versions/*"]
   - Confirm database_url and database_url_sync match the target environment.
 - Alembic cannot detect models:
   - Ensure all model modules are imported in env.py.
+- Vector embedding errors:
+  - Verify pgvector extension is enabled and compatible with PostgreSQL version.
+- Foreign key constraint violations:
+  - Ensure parent records are created before child records in seed data.
+- Role enum validation:
+  - Verify UserRole enum values match the database enum definition.
 
 **Section sources**
 - [apps/api/scripts/seed.py:25-27](file://apps/api/scripts/seed.py#L25-L27)
 - [apps/api/alembic/env.py:12-21](file://apps/api/alembic/env.py#L12-L21)
+- [apps/api/alembic/versions/14cdd47b97b4_initial_schema.py:133](file://apps/api/alembic/versions/14cdd47b97b4_initial_schema.py#L133)
 
 ## Conclusion
-The Xsamaa AI Pipeline leverages Alembic with dynamic URL resolution and explicit model imports to manage database migrations. The asynchronous SQLAlchemy engine and session factory integrate cleanly with the application, while the seed script provides a safe initialization routine. Following the recommended practices ensures robust schema evolution and reliable production deployments.
+The Xsamaa AI Pipeline leverages Alembic with dynamic URL resolution and explicit model imports to manage database migrations. The initial schema establishes a comprehensive operations foundation with 8 core tables supporting brands, stores, salespeople, users, recordings, conversations, transcript segments, and conversation analysis. The asynchronous SQLAlchemy engine and session factory integrate cleanly with the application, while the seed script provides a safe initialization routine with realistic test data. Following the recommended practices ensures robust schema evolution and reliable production deployments.
 
 ## Appendices
 
@@ -409,8 +521,6 @@ The Xsamaa AI Pipeline leverages Alembic with dynamic URL resolution and explici
 - Dropping a table:
   - Ensure referential integrity is handled; cascade deletes if appropriate.
 
-[No sources needed since this section provides general guidance]
-
 ### Database Maintenance Operations
 - Vacuum/analyze:
   - Regular maintenance improves query performance.
@@ -418,5 +528,18 @@ The Xsamaa AI Pipeline leverages Alembic with dynamic URL resolution and explici
   - Use logical backups for development and point-in-time recovery for production.
 - Monitoring:
   - Track slow queries and long-running transactions.
+- Vector extension management:
+  - Monitor pgvector extension health and optimize embedding queries.
+- Index optimization:
+  - Regularly analyze query patterns and adjust indexes accordingly.
 
-[No sources needed since this section provides general guidance]
+### Seed Data Structure
+The seed script provides comprehensive test data including:
+- Single brand with description
+- Two stores with working hours JSON
+- Three salespeople with roles and shifts
+- Five users with different role types and credentials
+- Realistic test credentials for all user types
+
+**Section sources**
+- [apps/api/scripts/seed.py:40-127](file://apps/api/scripts/seed.py#L40-L127)

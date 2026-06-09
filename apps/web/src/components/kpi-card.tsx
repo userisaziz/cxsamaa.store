@@ -17,7 +17,9 @@ export function KPICard({ title, value, description, icon: Icon, trend }: KPICar
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium text-steel">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-steel" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green-soft">
+          <Icon className="h-4 w-4 text-brand-green-deep" />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-semibold tracking-tight text-ink">{value}</div>

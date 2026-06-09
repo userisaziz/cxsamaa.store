@@ -1,0 +1,4 @@
+- Client-side components are explicitly marked with "use client" directive when utilizing hooks or browser APIs.
+- Navigation items are defined as static configuration arrays with optional role-based filtering logic.
+- Active navigation states are determined using `usePathname` with `startsWith` matching for hierarchical routes.
+- Visual consistency is maintained using `cn` utility for conditional class merging and Tailwind CSS design tokens.

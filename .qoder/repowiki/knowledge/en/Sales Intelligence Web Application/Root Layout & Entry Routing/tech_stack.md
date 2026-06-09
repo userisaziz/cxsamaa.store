@@ -1,1 +1,0 @@
-Next.js App Router with Tailwind CSS v4 (@import "tailwindcss") and OKLCH-based design tokens.

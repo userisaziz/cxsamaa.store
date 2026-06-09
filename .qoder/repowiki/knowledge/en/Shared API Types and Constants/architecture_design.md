@@ -1,4 +1,0 @@
-- Acts as a type-only library with no runtime logic, exporting interfaces and constants via `src/index.ts`.
-- Defines API request/response shapes (e.g., `LoginRequest`, `Brand`, `Recording`) in `src/api-types.ts` to ensure frontend/backend type consistency.
-- Centralizes domain enums and configuration values (e.g., `ROLES`, `RECORDING_STATUSES`) in `src/constants.ts` using `as const` patterns for type safety.
-- Configured as a private package (`@samaa/shared`) with TypeScript compilation (`tsc`) for type checking and declaration generation.

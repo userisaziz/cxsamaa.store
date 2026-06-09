@@ -1,0 +1,4 @@
+- Entry point `src/index.ts` re-exports all public symbols from `api-types.ts` and `constants.ts`, establishing a flat public API surface.
+- `api-types.ts` defines request/response DTOs and domain models (Auth, Brand, Store, Salesperson, Recording, Conversation, Metrics) that mirror backend Pydantic schemas, ensuring type safety across frontend/backend boundaries.
+- `constants.ts` declares string-literal unions via `as const` objects for roles, recording statuses, outcomes, and audio constraints, imported by `api-types.ts` for consistent typing.
+- Build is handled by TypeScript compiler (`tsc`) as configured in `package.json` and `tsconfig.json`, with no runtime dependencies beyond TypeScript dev tooling.

@@ -75,6 +75,7 @@ echo ""
 
 # Run seed
 echo -e "${YELLOW}Seeding database...${NC}"
+export PYTHONPATH="$API_DIR:$PYTHONPATH"
 python scripts/seed.py
 echo ""
 

@@ -5,12 +5,12 @@ import type { RecordingStatus } from "@samaa/shared";
 
 const statusConfig: Record<RecordingStatus, { label: string; className: string }> = {
   UPLOADED: { label: "Uploaded", className: "bg-stone/10 text-slate border-stone/20" },
-  PREPROCESSING: { label: "Preprocessing", className: "bg-blue-50 text-blue-700 border-blue-100" },
-  TRANSCRIBING: { label: "Transcribing", className: "bg-blue-50 text-blue-700 border-blue-100" },
-  DIARIZING: { label: "Diarizing", className: "bg-blue-50 text-blue-700 border-blue-100" },
-  SEGMENTING: { label: "Segmenting", className: "bg-blue-50 text-blue-700 border-blue-100" },
-  ANALYZING: { label: "Analyzing", className: "bg-blue-50 text-blue-700 border-blue-100" },
-  SCORING: { label: "Scoring", className: "bg-blue-50 text-blue-700 border-blue-100" },
+  PREPROCESSING: { label: "Preprocessing", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
+  TRANSCRIBING: { label: "Transcribing", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
+  DIARIZING: { label: "Diarizing", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
+  SEGMENTING: { label: "Segmenting", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
+  ANALYZING: { label: "Analyzing", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
+  SCORING: { label: "Scoring", className: "bg-brand-tag/10 text-brand-tag border-brand-tag/20" },
   COMPLETED: { label: "Completed", className: "bg-brand-green-soft text-brand-green-deep border-brand-green/30" },
   FAILED: { label: "Failed", className: "bg-destructive/10 text-destructive border-destructive/20" },
 };

@@ -80,14 +80,14 @@ export default function BrandDashboardPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Brand Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your brand performance</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Brand Dashboard</h1>
+        <p className="mt-1 text-sm text-steel">Overview of your brand performance across all locations</p>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Stores"
           value={stores?.length ?? 0}
@@ -147,7 +147,7 @@ export default function BrandDashboardPage() {
                         {store.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-steel">
                       {store.location || "—"}
                     </TableCell>
                     <TableCell className="text-right">{agg.count}</TableCell>
@@ -157,23 +157,23 @@ export default function BrandDashboardPage() {
                           variant="outline"
                           className={
                             agg.avgScore >= 80
-                              ? "border-green-200 text-green-700 bg-green-50"
+                              ? "border-brand-green/30 text-brand-green-deep bg-brand-green-soft"
                               : agg.avgScore >= 60
-                              ? "border-amber-200 text-amber-700 bg-amber-50"
-                              : "border-red-200 text-red-700 bg-red-50"
+                              ? "border-brand-warn/30 text-amber-700 bg-amber-50"
+                              : "border-brand-error/20 text-destructive bg-destructive/10"
                           }
                         >
                           {agg.avgScore.toFixed(0)}
                         </Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-steel">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">{agg.conversations}</TableCell>
                   </TableRow>
                 )) ?? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-steel py-12">
                     No stores found
                   </TableCell>
                 </TableRow>
@@ -187,7 +187,7 @@ export default function BrandDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <AlertTriangle className="h-4 w-4 text-brand-warn" />
             Coaching Alerts
           </CardTitle>
         </CardHeader>
@@ -200,28 +200,28 @@ export default function BrandDashboardPage() {
                 .map((p) => (
                   <div
                     key={p.salesperson_id}
-                    className="flex items-center justify-between rounded-md border border-red-100 bg-red-50/50 px-3 py-2"
+                    className="flex items-center justify-between rounded-md border border-brand-error/20 bg-destructive/5 px-4 py-3"
                   >
                     <div>
-                      <p className="text-sm font-medium">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-medium text-ink">{p.name}</p>
+                      <p className="text-xs text-steel">
                         Score: {p.avg_overall_score?.toFixed(0)} · {p.total_conversations} conversations
                       </p>
                     </div>
-                    <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50">
+                    <Badge variant="outline" className="border-brand-error/20 text-destructive bg-destructive/10">
                       Needs Attention
                     </Badge>
                   </div>
                 ))}
               {perfValues.filter((p) => p.avg_overall_score != null && p.avg_overall_score < 60)
                 .length === 0 && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-steel">
                   No salespeople currently need urgent coaching. Great job!
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-steel">
               Coaching alerts will appear here when AI analysis identifies salespeople who need improvement.
             </p>
           )}

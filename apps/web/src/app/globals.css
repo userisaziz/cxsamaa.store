@@ -66,6 +66,13 @@
   --color-stone: oklch(0.65 0 0);
   --color-on-dark: oklch(0.985 0 0);
   --color-on-dark-muted: oklch(0.75 0 0);
+  --color-hero-sky-from: oklch(0.95 0.02 220);
+  --color-hero-sky-to: oklch(0.97 0.01 80);
+  --color-hero-dark-from: oklch(0.35 0.08 180);
+  --color-hero-dark-to: oklch(0.55 0.12 165);
+  --color-canvas: oklch(1 0 0);
+  --color-surface: oklch(0.96 0 0);
+  --color-muted-label: oklch(0.65 0 0);
 }
 
 :root {

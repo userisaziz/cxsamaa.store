@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: web_app/dashboard_management
+title: Dashboard Management
+scope:
+    - apps/web/src/app/(dashboard)/brand/
+    - apps/web/src/app/(dashboard)/search/
+    - apps/web/src/app/(dashboard)/salespeople/
+    - apps/web/src/app/(dashboard)/salesperson/
+    - apps/web/src/app/(dashboard)/stores/
+    - apps/web/src/app/(dashboard)/store/
+source_files: []
+depends_on: []
+related_to:
+    - path: web_app/dashboard_conversations
+    - path: web_app/shared_ui_lib
+    - path: api_service

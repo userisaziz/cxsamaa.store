@@ -1,3 +1,0 @@
-- Components requiring browser APIs or client-side state (e.g., auth, routing) are explicitly marked with "use client" directive.
-- Presentational components accept data via props interfaces and delegate styling to shared UI primitives or Tailwind utility classes.
-- Role-based access control in navigation is implemented by filtering static configuration arrays against the current user's role from the auth store.

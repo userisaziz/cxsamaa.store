@@ -1,6 +1,7 @@
 """Seed script to populate the database with test data."""
 import asyncio
 import uuid
+import bcrypt
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,10 +13,12 @@ from src.models.brand import Brand
 from src.models.store import Store
 from src.models.salesperson import Salesperson
 
-# Import passlib for password hashing
-from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 
 async def seed():
@@ -71,14 +74,14 @@ async def seed():
             User(
                 id=uuid.uuid4(),
                 email="admin@samaa.com",
-                password_hash=pwd_context.hash("admin123"),
+                password_hash=hash_password("admin123"),
                 full_name="Super Admin",
                 role=UserRole.SUPER_ADMIN,
             ),
             User(
                 id=uuid.uuid4(),
                 email="brand@retailmax.com",
-                password_hash=pwd_context.hash("brand123"),
+                password_hash=hash_password("brand123"),
                 full_name="Brand Manager",
                 role=UserRole.BRAND_ADMIN,
                 brand_id=brand.id,
@@ -86,7 +89,7 @@ async def seed():
             User(
                 id=uuid.uuid4(),
                 email="manager@retailmax.com",
-                password_hash=pwd_context.hash("manager123"),
+                password_hash=hash_password("manager123"),
                 full_name="Store Manager",
                 role=UserRole.STORE_MANAGER,
                 brand_id=brand.id,
@@ -95,7 +98,7 @@ async def seed():
             User(
                 id=uuid.uuid4(),
                 email="alice@retailmax.com",
-                password_hash=pwd_context.hash("sales123"),
+                password_hash=hash_password("sales123"),
                 full_name="Alice Johnson",
                 role=UserRole.SALESPERSON,
                 brand_id=brand.id,
@@ -104,7 +107,7 @@ async def seed():
             User(
                 id=uuid.uuid4(),
                 email="ops@samaa.com",
-                password_hash=pwd_context.hash("ops123"),
+                password_hash=hash_password("ops123"),
                 full_name="Operations Staff",
                 role=UserRole.OPERATOR,
             ),

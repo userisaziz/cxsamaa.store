@@ -1,1 +1,0 @@
-Unifies the Next.js frontend, FastAPI backend, and shared types into a cohesive monorepo with synchronized development workflows and infrastructure.

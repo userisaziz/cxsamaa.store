@@ -204,7 +204,7 @@ export default function OperationsPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-ink">Upload Recording</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Upload Recording</h1>
         <p className="mt-1 text-sm text-steel">
           Upload audio recordings for salespeople. Select the hierarchy, pick a
           file, and upload.
@@ -322,10 +322,10 @@ export default function OperationsPage() {
               onClick={() => fileInputRef.current?.click()}
               className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
                 isDragging
-                  ? "border-primary bg-primary/5"
+                  ? "border-brand-green bg-brand-green-soft"
                   : selectedFile
-                    ? "border-green-500 bg-green-50"
-                    : "border-border hover:border-primary/50 hover:bg-surface"
+                    ? "border-brand-green bg-brand-green-soft"
+                    : "border-border hover:border-brand-green/50 hover:bg-surface"
               }`}
             >
               <input
@@ -337,7 +337,7 @@ export default function OperationsPage() {
               />
               {selectedFile ? (
                 <div className="flex items-center gap-3">
-                  <FileAudio className="h-8 w-8 text-green-600" />
+                  <FileAudio className="h-8 w-8 text-brand-green-deep" />
                   <div>
                     <p className="text-sm font-medium text-ink">
                       {selectedFile.name}
@@ -346,7 +346,7 @@ export default function OperationsPage() {
                       {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                     </p>
                   </div>
-                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <CheckCircle className="h-5 w-5 text-brand-green-deep" />
                 </div>
               ) : (
                 <>
@@ -394,11 +394,11 @@ export default function OperationsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-green-50 p-3 text-center">
-                <p className="text-2xl font-semibold text-green-700">
+              <div className="rounded-lg bg-brand-green-soft p-3 text-center">
+                <p className="text-2xl font-semibold text-brand-green-deep">
                   {completedCount}
                 </p>
-                <p className="text-xs text-green-600">Completed</p>
+                <p className="text-xs text-brand-green-deep">Completed</p>
               </div>
               <div className="rounded-lg bg-blue-50 p-3 text-center">
                 <p className="text-2xl font-semibold text-blue-700">
@@ -406,11 +406,11 @@ export default function OperationsPage() {
                 </p>
                 <p className="text-xs text-blue-600">Processing</p>
               </div>
-              <div className="rounded-lg bg-red-50 p-3 text-center">
-                <p className="text-2xl font-semibold text-red-700">
+              <div className="rounded-lg bg-destructive/10 p-3 text-center">
+                <p className="text-2xl font-semibold text-destructive">
                   {failedCount}
                 </p>
-                <p className="text-xs text-red-600">Failed</p>
+                <p className="text-xs text-destructive">Failed</p>
               </div>
             </div>
 
@@ -457,13 +457,13 @@ export default function OperationsPage() {
                 >
                   <div className="flex items-center gap-3">
                     {item.status === "uploading" && (
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      <Loader2 className="h-4 w-4 animate-spin text-brand-tag" />
                     )}
                     {item.status === "success" && (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-brand-green-deep" />
                     )}
                     {item.status === "error" && (
-                      <XCircle className="h-4 w-4 text-red-600" />
+                      <XCircle className="h-4 w-4 text-destructive" />
                     )}
                     <div>
                       <p className="text-sm font-medium text-ink">

@@ -1,4 +1,0 @@
-- Acts as the Next.js App Router entry point via `layout.tsx`, wrapping all pages with a shared `<Providers>` component for context/state management.
-- Establishes global typography using `Inter` and `Geist_Mono` fonts injected via CSS variables.
-- Implements a client-side landing page (`page.tsx`) that hydrates authentication state and redirects users to role-specific dashboards (Brand, Store, or Recordings).
-- Centralizes design tokens and dark mode support in `globals.css` using Tailwind CSS v4 syntax and OKLCH color spaces.

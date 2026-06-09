@@ -6,24 +6,27 @@
 - [apps/api/src/main.py](file://apps/api/src/main.py)
 - [apps/api/src/database.py](file://apps/api/src/database.py)
 - [apps/api/src/workers/celery_app.py](file://apps/api/src/workers/celery_app.py)
-- [docker-compose.yml](file://docker-compose.yml)
-- [start_servers.sh](file://start_servers.sh)
-- [apps/api/pyproject.toml](file://apps/api/pyproject.toml)
-- [apps/api/alembic.ini](file://apps/api/alembic.ini)
-- [packages/shared/src/constants.ts](file://packages/shared/src/constants.ts)
+- [apps/api/src/workers/preprocessing.py](file://apps/api/src/workers/preprocessing.py)
 - [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
 - [apps/api/src/storage/local.py](file://apps/api/src/storage/local.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
+- [docker-compose.yml](file://docker-compose.yml)
+- [start_servers.sh](file://start_servers.sh)
+- [apps/api/alembic.ini](file://apps/api/alembic.ini)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated introduction to reference the comprehensive SETUP_GUIDE.md as the definitive setup reference
-- Enhanced development vs production configuration differences section with detailed examples
-- Expanded deployment-specific configurations with production setup guidance
-- Added comprehensive troubleshooting section with practical solutions
-- Updated architecture overview to reflect the complete system integration
-- Enhanced security considerations with production-grade recommendations
+- Enhanced configuration hierarchy documentation with multi-layered Pydantic settings validation
+- Expanded database configuration coverage with connection pooling and async/asyncpg integration
+- Added comprehensive Redis/Celery integration details including task processing and worker configuration
+- Documented NVIDIA API client implementation with retry logic and error handling
+- Enhanced storage backend configuration with factory pattern and local/cloud backend support
+- Updated JWT configuration documentation with security best practices
+- Added detailed CORS configuration and middleware integration
+- Expanded Docker Compose orchestration with health checks and service dependencies
+- Enhanced startup script documentation with automated service initialization
+- Added troubleshooting section for common configuration issues
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -37,22 +40,23 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the configuration and environment management strategy for the Xsamaa AI Pipeline. The comprehensive setup guide in [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md) serves as the definitive reference for installation, development setup, and production deployment. This document focuses specifically on the configuration architecture, environment variable management, and multi-environment deployment strategies built with Pydantic settings.
+This document explains the configuration and environment management strategy for the Xsamaa AI Pipeline. The configuration system is built around Pydantic Settings with comprehensive validation, supporting both development and production environments with secure secret handling and strict validation patterns.
 
-The configuration system supports both development and production environments with secure secret handling, strict validation patterns, and comprehensive environment-specific feature flags. It integrates seamlessly with Docker Compose orchestration, startup automation, and the AI processing pipeline.
+The system integrates seamlessly with Docker Compose orchestration, startup automation, and the complete AI processing pipeline. It provides centralized configuration management for database connections, Redis/Celery workers, NVIDIA API credentials, JWT token management, storage backends, and CORS policies.
 
 **Section sources**
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 - [apps/api/src/config.py](file://apps/api/src/config.py)
+- [apps/api/src/main.py](file://apps/api/src/main.py)
 
 ## Project Structure
-The configuration system spans several layers with clear separation of concerns:
-- Root orchestration via Docker Compose defines services and shared environment variables
-- Application-level configuration is centralized in the FastAPI service under apps/api/src/config.py
-- Database migrations and worker configuration integrate with the same settings
-- Shared constants and environment-aware defaults are provided in the shared package
-- Startup scripts coordinate service readiness and automated initialization
-- Comprehensive setup documentation provides step-by-step deployment guidance
+The configuration system spans multiple layers with clear separation of concerns:
+
+- **Root orchestration** via Docker Compose defines services and shared environment variables
+- **Application-level configuration** centralized in the FastAPI service under apps/api/src/config.py
+- **Database migrations** and worker configuration integrate with the same settings
+- **AI processing pipeline** with dedicated NVIDIA API client and retry logic
+- **Startup scripts** coordinate service readiness and automated initialization
+- **Storage abstraction** with factory pattern for backend selection
 
 ```mermaid
 graph TB
@@ -62,9 +66,10 @@ CFG["apps/api/src/config.py"]
 MAIN["apps/api/src/main.py"]
 DBMOD["apps/api/src/database.py"]
 CELERY["apps/api/src/workers/celery_app.py"]
+PREPROC["apps/api/src/workers/preprocessing.py"]
 ALEMBIC["apps/api/alembic.ini"]
-SETUP["docs/SETUP_GUIDE.md"]
 STORAGE["apps/api/src/storage/"]
+NVIDIA["apps/api/src/ai/nvidia_client.py"]
 DC --> CFG
 SH --> MAIN
 MAIN --> DBMOD
@@ -73,9 +78,9 @@ CFG --> DBMOD
 CFG --> CELERY
 CFG --> ALEMBIC
 CFG --> STORAGE
-SETUP --> CFG
-SETUP --> DC
-SETUP --> SH
+CFG --> NVIDIA
+STORAGE --> PREPROC
+NVIDIA --> PREPROC
 ```
 
 **Diagram sources**
@@ -85,26 +90,26 @@ SETUP --> SH
 - [apps/api/src/main.py](file://apps/api/src/main.py)
 - [apps/api/src/database.py](file://apps/api/src/database.py)
 - [apps/api/src/workers/celery_app.py](file://apps/api/src/workers/celery_app.py)
+- [apps/api/src/workers/preprocessing.py](file://apps/api/src/workers/preprocessing.py)
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 - [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
 
 **Section sources**
 - [docker-compose.yml](file://docker-compose.yml)
 - [start_servers.sh](file://start_servers.sh)
 - [apps/api/src/config.py](file://apps/api/src/config.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ## Core Components
 The configuration system is implemented as a Pydantic Settings model that loads environment variables from multiple sources and validates them at runtime. It centralizes:
 
-- **Database configuration**: Connection URLs, pool settings, and echo logging
+- **Database configuration**: Connection URLs for async and sync operations, pool settings, and echo logging
 - **Redis-backed Celery workers**: Broker/backend configuration, queue management, and worker settings
-- **NVIDIA API credentials**: STT, diarization, and analysis service configuration
+- **NVIDIA API credentials**: STT, diarization, and analysis service configuration with retry logic
 - **JWT security settings**: Signing algorithms, secrets, and token expiration policies
-- **Storage backend configuration**: Local and cloud storage backends
+- **Storage backend configuration**: Local and cloud storage backends with factory pattern
 - **Application settings**: Environment, debug mode, host/port configuration
-- **CORS configuration**: Cross-origin resource sharing policies
+- **CORS configuration**: Cross-origin resource sharing policies with dynamic origin parsing
 - **AI processing pipeline settings**: Model configurations and timeout parameters
 
 Key responsibilities:
@@ -129,26 +134,27 @@ APP["FastAPI App<br/>(apps/api/src/main.py)"]
 DB["Database Layer<br/>(apps/api/src/database.py)"]
 REDIS["Redis Broker/Backend"]
 CELERY["Celery Workers<br/>(apps/api/src/workers/celery_app.py)"]
+PREPROC["Preprocessing Worker<br/>(apps/api/src/workers/preprocessing.py)"]
 ALEMBIC["Alembic Migrations<br/>(apps/api/alembic.ini)"]
 DOCKER["Docker Compose Services<br/>(docker-compose.yml)"]
 START["Startup Script<br/>(start_servers.sh)"]
-SETUP["Setup Guide<br/>(docs/SETUP_GUIDE.md)"]
 STORAGE["Storage Backend<br/>(apps/api/src/storage/)"]
+NVIDIA["NVIDIA Client<br/>(apps/api/src/ai/nvidia_client.py)"]
 ENV --> PYD
 PYD --> APP
 PYD --> DB
 PYD --> CELERY
 PYD --> ALEMBIC
 PYD --> STORAGE
+PYD --> NVIDIA
 DOCKER --> APP
 DOCKER --> CELERY
 START --> APP
 START --> CELERY
-SETUP --> PYD
-SETUP --> DOCKER
-SETUP --> START
 APP --> REDIS
 CELERY --> REDIS
+PREPROC --> STORAGE
+PREPROC --> NVIDIA
 ```
 
 **Diagram sources**
@@ -156,11 +162,12 @@ CELERY --> REDIS
 - [apps/api/src/main.py](file://apps/api/src/main.py)
 - [apps/api/src/database.py](file://apps/api/src/database.py)
 - [apps/api/src/workers/celery_app.py](file://apps/api/src/workers/celery_app.py)
+- [apps/api/src/workers/preprocessing.py](file://apps/api/src/workers/preprocessing.py)
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
 - [docker-compose.yml](file://docker-compose.yml)
 - [start_servers.sh](file://start_servers.sh)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 - [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
 
 ## Detailed Component Analysis
 
@@ -194,9 +201,9 @@ Validation patterns:
 The database configuration is derived from the settings model and consumed by the database module. It includes:
 
 **Connection Management**:
-- Asynchronous connection URL for FastAPI operations
+- Asynchronous connection URL for FastAPI operations using asyncpg driver
 - Synchronous connection URL for Alembic migrations and background tasks
-- Connection pooling with configurable pool size and overflow limits
+- Connection pooling with configurable pool size (10) and overflow (20)
 - Optional echo flag for SQL statement logging in development
 
 **Database Module Integration**:
@@ -208,7 +215,7 @@ The database configuration is derived from the settings model and consumed by th
 ```mermaid
 flowchart TD
 Start(["Load Settings"]) --> BuildURL["Build Database URLs"]
-BuildURL --> PoolCfg["Apply Pool Settings"]
+BuildURL --> PoolCfg["Apply Pool Settings<br/>pool_size=10, max_overflow=20"]
 PoolCfg --> EchoOpt{"Debug Mode?"}
 EchoOpt --> |Yes| EnableEcho["Enable SQL Echo"]
 EchoOpt --> |No| DisableEcho["Disable Echo"]
@@ -270,8 +277,8 @@ Worker-->>Redis : "Store results"
 - [apps/api/src/config.py](file://apps/api/src/config.py)
 - [apps/api/src/workers/celery_app.py](file://apps/api/src/workers/celery_app.py)
 
-### NVIDIA API Credentials and AI Processing Configuration
-NVIDIA API credentials are loaded from environment variables and configured for the complete AI processing pipeline:
+### NVIDIA API Client Implementation
+The NVIDIA API client provides comprehensive integration with NVIDIA NIM services with robust error handling and retry logic:
 
 **API Configuration**:
 - NVIDIA API key for authentication with external services
@@ -279,20 +286,22 @@ NVIDIA API credentials are loaded from environment variables and configured for 
 - Model configurations for STT, diarization, LLM analysis, and embeddings
 - Timeout settings for API requests (5-minute default per call)
 
+**Client Features**:
+- HTTP client with retry logic for transient failures
+- Comprehensive error handling with specific exception types
+- Rate limiting detection and exponential backoff
+- Authentication error handling and API key validation
+- Support for both JSON and multipart form data requests
+
 **Processing Pipeline Integration**:
 - Speech-to-text with word-level timestamps
 - Speaker diarization for conversation segmentation
 - AI analysis for intent detection and performance scoring
 - Embedding generation for semantic search capabilities
 
-**Security Considerations**:
-- Credentials are not logged or exposed in error traces
-- API keys are managed via environment variables
-- Validation ensures required keys and endpoints are present
-- Timeout configuration prevents hanging requests
-
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
 
 ### Storage Backend Configuration
 The storage backend is selected and configured via settings with support for both local and cloud storage:
@@ -309,15 +318,53 @@ The storage backend is selected and configured via settings with support for bot
 - Sync methods for Celery worker processing
 - Signed URL generation for temporary access
 
-**Future Extensibility**:
-- Factory pattern for backend selection
-- Placeholder for cloud storage implementations
+**Factory Pattern Implementation**:
+- Centralized backend selection based on configuration
+- Extensible design for future cloud storage implementations
 - Consistent interface across different storage backends
 
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
 - [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
 - [apps/api/src/storage/local.py](file://apps/api/src/storage/local.py)
+
+### JWT Configuration and Security
+JWT configuration provides secure token-based authentication with comprehensive security controls:
+
+**Security Settings**:
+- HS256 signing algorithm for symmetric key cryptography
+- Configurable secret key for token signing
+- Access token expiration (15 minutes) and refresh token expiration (7 days)
+- Secure token generation and validation
+
+**Integration Patterns**:
+- Middleware integration for request authentication
+- Token validation and user identity extraction
+- Refresh token management for seamless user experience
+- Security headers and CORS policy enforcement
+
+**Section sources**
+- [apps/api/src/config.py](file://apps/api/src/config.py)
+- [apps/api/src/main.py](file://apps/api/src/main.py)
+
+### CORS Configuration and Middleware
+CORS configuration provides flexible cross-origin resource sharing policies:
+
+**Configuration Options**:
+- Dynamic origin list parsing from comma-separated string
+- Configurable allow methods and headers
+- Credential support for authenticated requests
+- Flexible origin matching for development and production
+
+**Middleware Integration**:
+- FastAPI CORSMiddleware integration
+- Runtime origin validation and matching
+- Security-conscious default configuration
+- Development-friendly relaxed settings
+
+**Section sources**
+- [apps/api/src/config.py](file://apps/api/src/config.py)
+- [apps/api/src/main.py](file://apps/api/src/main.py)
 
 ### Alembic Migration Configuration
 Alembic reads the database URL from the settings model to connect to the target database for schema migrations:
@@ -432,7 +479,6 @@ Environment-specific differences are carefully managed through configuration val
 
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ### Security Considerations for Sensitive Data
 Comprehensive security measures protect sensitive configuration data:
@@ -463,7 +509,6 @@ Comprehensive security measures protect sensitive configuration data:
 
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ### Deployment-Specific Configurations and Scaling
 Production deployment requires comprehensive configuration management:
@@ -489,7 +534,6 @@ Production deployment requires comprehensive configuration management:
 **Section sources**
 - [docker-compose.yml](file://docker-compose.yml)
 - [apps/api/src/config.py](file://apps/api/src/config.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ### Environment-Specific Feature Flags
 Feature flags enable capability management across different environments:
@@ -514,7 +558,6 @@ Feature flags enable capability management across different environments:
 
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ## Dependency Analysis
 The configuration model acts as the single source of truth for all downstream components with comprehensive dependency management:
@@ -526,6 +569,7 @@ The configuration model acts as the single source of truth for all downstream co
 - Alembic depends on database settings for migration execution
 - Startup script orchestrates prerequisite checks and service initialization
 - Storage backend depends on configuration for backend selection and initialization
+- NVIDIA client depends on API settings for external service integration
 
 **Integration Points**:
 - Settings model provides unified configuration interface
@@ -540,13 +584,13 @@ CFG --> DBMOD["database.py"]
 CFG --> CELERY["celery_app.py"]
 CFG --> ALEMBIC["alembic.ini"]
 CFG --> STORAGE["storage/"]
+CFG --> NVIDIA["nvidia_client.py"]
 START["start_servers.sh"] --> MAIN
 START --> CELERY
 DOCKER["docker-compose.yml"] --> MAIN
 DOCKER --> CELERY
-SETUP["setup_guide.md"] --> CFG
-SETUP --> DOCKER
-SETUP --> START
+STORAGE --> PREPROC["preprocessing.py"]
+NVIDIA --> PREPROC
 ```
 
 **Diagram sources**
@@ -557,8 +601,9 @@ SETUP --> START
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
 - [start_servers.sh](file://start_servers.sh)
 - [docker-compose.yml](file://docker-compose.yml)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 - [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
+- [apps/api/src/workers/preprocessing.py](file://apps/api/src/workers/preprocessing.py)
 
 **Section sources**
 - [apps/api/src/config.py](file://apps/api/src/config.py)
@@ -568,7 +613,9 @@ SETUP --> START
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
 - [start_servers.sh](file://start_servers.sh)
 - [docker-compose.yml](file://docker-compose.yml)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
+- [apps/api/src/storage/base.py](file://apps/api/src/storage/base.py)
+- [apps/api/src/ai/nvidia_client.py](file://apps/api/src/ai/nvidia_client.py)
+- [apps/api/src/workers/preprocessing.py](file://apps/api/src/workers/preprocessing.py)
 
 ## Performance Considerations
 Optimized configuration for various deployment scenarios:
@@ -636,12 +683,11 @@ Comprehensive troubleshooting for common configuration and deployment issues:
 - [apps/api/src/workers/celery_app.py](file://apps/api/src/workers/celery_app.py)
 - [apps/api/alembic.ini](file://apps/api/alembic.ini)
 - [start_servers.sh](file://start_servers.sh)
-- [docs/SETUP_GUIDE.md](file://docs/SETUP_GUIDE.md)
 
 ## Conclusion
 The Xsamaa AI Pipeline employs a robust, environment-driven configuration system centered on Pydantic settings with comprehensive validation and security controls. The system supports seamless development and production deployments through careful environment management, secure secret handling, and strict validation patterns.
 
-The integration with Docker Compose orchestration and automated startup scripts provides a reliable foundation for both development and production operations. The comprehensive setup guide serves as the definitive reference for installation, configuration, and deployment procedures.
+The integration with Docker Compose orchestration and automated startup scripts provides a reliable foundation for both development and production operations. The comprehensive configuration system enables centralized management of database connections, Redis/Celery workers, NVIDIA API integrations, JWT authentication, storage backends, and CORS policies.
 
 Adhering to the outlined configuration practices ensures consistent behavior across environments, improved security through proper secret management, and scalable performance through optimized resource allocation. The modular architecture enables easy maintenance, future extensibility, and reliable operation in production environments.
 

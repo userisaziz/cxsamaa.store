@@ -2,11 +2,11 @@
 schema_version: 1
 locale: en-US
 branch: main
-exported_at: "2026-06-09T11:15:28Z"
+exported_at: "2026-06-09T19:52:52Z"
 modules:
     "":
-        dir_name: SAMAI Platform Orchestrator
-        title: SAMAI Platform Orchestrator
+        dir_name: Retail Intelligence Monorepo Orchestrator
+        title: Retail Intelligence Monorepo Orchestrator
         scope:
             - .env
             - .env.example
@@ -15,6 +15,7 @@ modules:
             - docker-compose.yml
             - package-lock.json
             - package.json
+            - seed.sh
             - start_servers.sh
             - turbo.json
         source_files: []
@@ -30,13 +31,13 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: web_app/dashboard_conversations
-            - path: web_app/dashboard_management
-            - path: web_app/auth
             - path: shared_package
+            - path: web_app/dashboard_management
+            - path: web_app/dashboard_conversations
+            - path: web_app
     shared_package:
-        dir_name: Shared API Types and Constants
-        title: Shared API Types and Constants
+        dir_name: Shared Type Definitions & Constants
+        title: Shared Type Definitions & Constants
         scope:
             - packages/shared/
         source_files: []
@@ -44,21 +45,24 @@ modules:
         depends_on: []
         related_to:
             - path: api_service
+            - path: web_app
     web_app:
-        dir_name: Sales Intelligence Web Application
-        title: Sales Intelligence Web Application
+        dir_name: Retail Intelligence Web Application
+        title: Retail Intelligence Web Application
         scope:
             - apps/web/
         source_files: []
         children:
-            - web_app/dashboard_conversations
-            - web_app/dashboard_management
             - web_app/dashboard_layout
-            - web_app/shared_ui_lib
-            - web_app/auth
             - web_app/app_shell
+            - web_app/shared_ui_lib
+            - web_app/dashboard_management
+            - web_app/auth
+            - web_app/dashboard_conversations
         depends_on: []
-        related_to: []
+        related_to:
+            - path: api_service
+            - path: shared_package
     web_app/app_shell:
         dir_name: Root Layout & Entry Routing
         title: Root Layout & Entry Routing
@@ -71,8 +75,7 @@ modules:
         depends_on: []
         related_to:
             - path: web_app/auth
-            - path: web_app/dashboard_management
-            - path: web_app/dashboard_conversations
+            - path: web_app/dashboard_layout
     web_app/auth:
         dir_name: Authentication & Session Management
         title: Authentication & Session Management
@@ -84,8 +87,8 @@ modules:
         children: []
         depends_on: []
         related_to:
+            - path: web_app/dashboard_layout
             - path: web_app/app_shell
-            - path: api_service
     web_app/dashboard_conversations:
         dir_name: Conversation Analysis & Coaching Dashboard
         title: Conversation Analysis & Coaching Dashboard
@@ -98,12 +101,11 @@ modules:
         depends_on: []
         related_to:
             - path: web_app/dashboard_management
+            - path: web_app/shared_ui_lib
             - path: api_service
-            - path: web_app/app_shell
-            - path: web_app/dashboard_layout
     web_app/dashboard_layout:
-        dir_name: Dashboard Layout & UI Components
-        title: Dashboard Layout & UI Components
+        dir_name: Dashboard Layout & Shell Components
+        title: Dashboard Layout & Shell Components
         scope:
             - apps/web/src/app/(dashboard)/layout.tsx
             - apps/web/src/components/layout/
@@ -114,8 +116,9 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: web_app/dashboard_management
-            - path: web_app/dashboard_conversations
+            - path: web_app/auth
+            - path: web_app/shared_ui_lib
+            - path: web_app/app_shell
     web_app/dashboard_management:
         dir_name: Dashboard Management
         title: Dashboard Management
@@ -131,9 +134,8 @@ modules:
         depends_on: []
         related_to:
             - path: web_app/dashboard_conversations
+            - path: web_app/shared_ui_lib
             - path: api_service
-            - path: web_app/app_shell
-            - path: web_app/dashboard_layout
     web_app/shared_ui_lib:
         dir_name: Shared UI Component Library & Web Utilities
         title: Shared UI Component Library & Web Utilities
@@ -145,4 +147,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: web_app/dashboard_layout
+            - path: web_app/dashboard_conversations
+            - path: web_app/dashboard_management

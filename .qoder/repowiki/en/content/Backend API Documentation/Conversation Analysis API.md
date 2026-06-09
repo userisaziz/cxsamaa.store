@@ -15,7 +15,18 @@
 - [search.py](file://apps/api/src/api/v1/search.py)
 - [transcript.py](file://apps/api/src/models/transcript.py)
 - [metrics.py](file://apps/api/src/models/metrics.py)
+- [recordings.py](file://apps/api/src/api/v1/recordings.py)
+- [recording.py](file://apps/api/src/services/recording.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Removed CSV export functionality from documentation as it has been dropped
+- Removed conversation summarization features from documentation as they have been dropped
+- Removed detailed transcript analysis capabilities from documentation as they have been dropped
+- Updated architecture overview to reflect simplified recording management approach
+- Updated API endpoints to focus on core conversation retrieval and basic analysis
+- Removed export-related sections and diagrams
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -32,6 +43,8 @@
 ## Introduction
 This document provides comprehensive API documentation for the conversation analysis functionality. It covers endpoints for retrieving conversation transcripts, analysis results, and performance metrics. It specifies HTTP methods, URL patterns, request/response schemas, and filtering capabilities. It also details conversation timeline retrieval, AI-generated insights, and coaching recommendations. Examples include transcript querying, sentiment analysis results, and conversation segmentation. Finally, it documents conversation-level permissions, data privacy controls, and export capabilities for analysis results.
 
+**Updated** Removed advanced features including CSV export functionality, conversation summarization, and detailed transcript analysis as these have been dropped from the current implementation.
+
 ## Project Structure
 The conversation analysis API is implemented as part of the FastAPI backend under apps/api. Key areas include:
 - API routes for conversations and search
@@ -39,7 +52,6 @@ The conversation analysis API is implemented as part of the FastAPI backend unde
 - Pydantic schemas for request/response serialization
 - Services for fetching conversation data
 - Workers orchestrating AI analysis and scoring
-- Export service for CSV exports
 - Search endpoint leveraging pgvector embeddings
 
 ```mermaid
@@ -47,11 +59,12 @@ graph TB
 subgraph "API Layer"
 R1["/api/v1/conversations<br/>GET /{id}<br/>GET /{id}/analysis"]
 R2["/api/v1/search<br/>GET /"]
+R3["/api/v1/recordings<br/>GET /<br/>GET /{id}<br/>GET /{id}/status<br/>POST /{id}/reprocess"]
 end
 subgraph "Services"
 S1["services/conversation.py<br/>get_conversation()<br/>get_analysis()"]
-S2["services/export.py<br/>export_conversations_csv()"]
 S3["services/search<br/>semantic_search()"]
+S4["services/recording.py<br/>list_recordings()<br/>get_recording()<br/>get_recording_status()"]
 end
 subgraph "Workers"
 W1["workers/analysis.py<br/>analyze_conversations()"]
@@ -62,12 +75,14 @@ subgraph "Models"
 M1["models/conversation.py<br/>Conversation<br/>ConversationAnalysis"]
 M2["models/transcript.py<br/>TranscriptSegment"]
 M3["models/metrics.py<br/>DailyMetrics<br/>WeeklyMetrics"]
+M4["models/recording.py<br/>Recording"]
 end
 R1 --> S1
 R2 --> S3
+R3 --> S4
 S1 --> M1
-S2 --> M1
 S3 --> M2
+S4 --> M4
 W1 --> M1
 W1 --> M2
 W2 --> M1
@@ -82,31 +97,36 @@ W3 --> W2
 - [transcript.py:10-26](file://apps/api/src/models/transcript.py#L10-L26)
 - [metrics.py:10-39](file://apps/api/src/models/metrics.py#L10-L39)
 - [conversation.py:10-25](file://apps/api/src/services/conversation.py#L10-L25)
-- [export.py:49-99](file://apps/api/src/services/export.py#L49-L99)
 - [search.py:14-98](file://apps/api/src/api/v1/search.py#L14-L98)
 - [analysis.py:152-241](file://apps/api/src/workers/analysis.py#L152-L241)
 - [scoring.py:235-313](file://apps/api/src/workers/scoring.py#L235-L313)
 - [pipeline.py:12-34](file://apps/api/src/workers/pipeline.py#L12-L34)
+- [recordings.py:18-124](file://apps/api/src/api/v1/recordings.py#L18-L124)
+- [recording.py:31-68](file://apps/api/src/services/recording.py#L31-L68)
 
 **Section sources**
 - [router.py:11-19](file://apps/api/src/api/v1/router.py#L11-L19)
 - [conversations.py:10-34](file://apps/api/src/api/v1/conversations.py#L10-L34)
+- [recordings.py:18-124](file://apps/api/src/api/v1/recordings.py#L18-L124)
 
 ## Core Components
 - Conversation retrieval endpoint: GET /api/v1/conversations/{conversation_id}
 - Conversation analysis endpoint: GET /api/v1/conversations/{conversation_id}/analysis
 - Semantic search endpoint: GET /api/v1/search
-- Export endpoint: CSV export of conversations and metrics
+- Recording management endpoints: GET /api/v1/recordings, GET /api/v1/recordings/{id}, GET /api/v1/recordings/{id}/status, POST /api/v1/recordings/{id}/reprocess
 - Pipeline orchestration: preprocessing → transcription → diarization → segmentation → analysis → scoring
 
+**Updated** Removed CSV export functionality and conversation summarization features as they are no longer available.
+
 Key schemas:
-- ConversationResponse: includes identifiers, timing, segment count, optional summary, and creation timestamp
-- ConversationAnalysisResponse: includes intent, products, budget, objections, competitors, closing attempt flag, outcome, confidence, scores dictionary, summary, coaching notes, and creation timestamp
+- ConversationResponse: includes identifiers, timing, segment count, and creation timestamp
+- ConversationAnalysisResponse: includes intent, products, budget, objections, competitors, closing attempt flag, outcome, confidence, scores dictionary, and creation timestamp
 
 **Section sources**
 - [conversations.py:13-34](file://apps/api/src/api/v1/conversations.py#L13-L34)
 - [conversation.py:4-33](file://apps/api/src/schemas/conversation.py#L4-L33)
 - [conversation.py:11-60](file://apps/api/src/models/conversation.py#L11-L60)
+- [recordings.py:18-124](file://apps/api/src/api/v1/recordings.py#L18-L124)
 
 ## Architecture Overview
 The conversation analysis pipeline is asynchronous and orchestrated by Celery tasks. The API exposes read-only endpoints for retrieving conversation metadata and AI-generated insights. The pipeline stages are:
@@ -116,7 +136,9 @@ The conversation analysis pipeline is asynchronous and orchestrated by Celery ta
 4. Segment conversations
 5. Analyze conversations (intent, products, objections, outcome, etc.)
 6. Score performance across five dimensions
-7. Export results and update metrics
+7. Update metrics
+
+**Updated** Simplified architecture to remove advanced features like CSV export and conversation summarization.
 
 ```mermaid
 sequenceDiagram
@@ -256,6 +278,30 @@ R-->>C : "JSON with results and total"
 - [search.py:14-98](file://apps/api/src/api/v1/search.py#L14-L98)
 - [transcript.py:10-26](file://apps/api/src/models/transcript.py#L10-L26)
 
+### Recording Management Endpoints
+**New** Added recording management endpoints as part of the simplified approach.
+
+- List recordings endpoint: GET /api/v1/recordings
+  - Query parameters: page, page_size, status, salesperson_id, date_from, date_to
+  - Response: paginated list of recordings with metadata
+  - Authentication: operator role required
+
+- Get recording endpoint: GET /api/v1/recordings/{recording_id}
+  - Response: RecordingResponse with file metadata and status
+  - Authentication: salesperson role required
+
+- Get recording status endpoint: GET /api/v1/recordings/{recording_id}/status
+  - Response: RecordingStatusResponse with current processing status
+  - Authentication: salesperson role required
+
+- Reprocess recording endpoint: POST /api/v1/recordings/{recording_id}/reprocess
+  - Response: RecordingResponse after reprocessing
+  - Authentication: brand admin role required
+
+**Section sources**
+- [recordings.py:21-124](file://apps/api/src/api/v1/recordings.py#L21-L124)
+- [recording.py:31-68](file://apps/api/src/services/recording.py#L31-L68)
+
 ### Conversation Timeline Retrieval
 - Timeline data is derived from TranscriptSegment entries linked to a recording and conversation time windows.
 - Segments are ordered by start_time and include speaker labels, timestamps, and text.
@@ -281,11 +327,12 @@ OrderSegs --> ReturnTimeline["Return ordered segments for timeline UI"]
 
 ### AI-Generated Insights and Coaching Recommendations
 - Analysis pipeline:
-  - Loads conversation segments within the conversation’s time window
+  - Loads conversation segments within the conversation's time window
   - Calls the AI analyzer to produce structured insights
   - Validates and stores results if confidence meets threshold
-  - Updates conversation summary
-- Analysis fields include intent, products, budget, objections, competitors, closing attempt, outcome, confidence, summary, and coaching notes.
+- Analysis fields include intent, products, budget, objections, competitors, closing attempt, outcome, confidence, and scores.
+
+**Updated** Removed conversation summary generation and detailed transcript analysis as these features have been dropped.
 
 ```mermaid
 flowchart TD
@@ -296,8 +343,7 @@ C --> |Yes| D["Validate outcome and confidence"]
 D --> E{"Confidence >= threshold?"}
 E --> |No| Skip["Skip storing"] --> F["Next conversation"]
 E --> |Yes| Store["Store ConversationAnalysis"]
-Store --> Summ["Update conversation summary"]
-Summ --> F["Next conversation"]
+Store --> F["Next conversation"]
 ```
 
 **Diagram sources**
@@ -312,7 +358,7 @@ Summ --> F["Next conversation"]
 
 ### Performance Metrics and Scoring
 - Scoring computes five-dimensional scores per conversation (e.g., greeting, discovery, product knowledge, objection handling, closing).
-- Scores are stored in the analysis record’s scores JSONB field.
+- Scores are stored in the analysis record's scores JSONB field.
 - Daily metrics are computed and upserted for entities (salesperson/store) based on completed recordings.
 
 ```mermaid
@@ -337,64 +383,51 @@ W-->>W : "Mark recording COMPLETED"
 - [scoring.py:235-313](file://apps/api/src/workers/scoring.py#L235-L313)
 - [metrics.py:10-39](file://apps/api/src/models/metrics.py#L10-L39)
 
-### Export Capabilities
-- CSV export of conversations and analyses supports filtering by recording_id and salesperson_id.
-- Export includes conversation metadata, analysis fields, and performance scores extracted from the scores dictionary.
-
-```mermaid
-flowchart TD
-Start(["Export conversations CSV"]) --> BuildQuery["Build SQL query with filters"]
-BuildQuery --> ExecQuery["Execute query and fetch rows"]
-ExecQuery --> WriteCSV["Write CSV header and rows"]
-WriteCSV --> Done(["Return CSV string"])
-```
-
-**Diagram sources**
-- [export.py:49-99](file://apps/api/src/services/export.py#L49-L99)
-
-**Section sources**
-- [export.py:49-99](file://apps/api/src/services/export.py#L49-L99)
-
 ## Dependency Analysis
-- API routers are mounted under /api/v1 and include conversations and search endpoints.
+- API routers are mounted under /api/v1 and include conversations, search, and recording endpoints.
 - Conversation retrieval depends on services that load models with relationships.
 - Analysis and scoring workers depend on models for conversations, transcript segments, and metrics.
-- Export service joins conversations with analyses and recordings.
+- Recording management endpoints depend on recording services for listing and status monitoring.
+
+**Updated** Removed export service dependency as CSV export functionality has been dropped.
 
 ```mermaid
 graph LR
 API["conversations.py"] --> SVC["services/conversation.py"]
 API --> MODELS["models/conversation.py"]
 SVC --> MODELS
+REC_API["recordings.py"] --> REC_SVC["services/recording.py"]
+REC_SVC --> REC_MODELS["models/recording.py"]
 PIPE["workers/pipeline.py"] --> ANA["workers/analysis.py"]
 PIPE --> SCR["workers/scoring.py"]
 ANA --> MODELS
 ANA --> TRAN["models/transcript.py"]
 SCR --> MODELS
 SCR --> MET["models/metrics.py"]
-EXP["services/export.py"] --> MODELS
 SRCH["api/v1/search.py"] --> TRAN
 ```
 
 **Diagram sources**
 - [router.py:11-19](file://apps/api/src/api/v1/router.py#L11-L19)
 - [conversations.py:10-34](file://apps/api/src/api/v1/conversations.py#L10-L34)
+- [recordings.py:18-124](file://apps/api/src/api/v1/recordings.py#L18-L124)
 - [conversation.py:10-25](file://apps/api/src/services/conversation.py#L10-L25)
 - [conversation.py:11-60](file://apps/api/src/models/conversation.py#L11-L60)
 - [transcript.py:10-26](file://apps/api/src/models/transcript.py#L10-L26)
 - [metrics.py:10-39](file://apps/api/src/models/metrics.py#L10-L39)
 - [analysis.py:152-241](file://apps/api/src/workers/analysis.py#L152-L241)
 - [scoring.py:235-313](file://apps/api/src/workers/scoring.py#L235-L313)
-- [export.py:49-99](file://apps/api/src/services/export.py#L49-L99)
 - [search.py:14-98](file://apps/api/src/api/v1/search.py#L14-L98)
+- [recording.py:31-68](file://apps/api/src/services/recording.py#L31-L68)
 
 **Section sources**
 - [router.py:11-19](file://apps/api/src/api/v1/router.py#L11-L19)
 - [conversation.py:10-25](file://apps/api/src/services/conversation.py#L10-L25)
 - [analysis.py:152-241](file://apps/api/src/workers/analysis.py#L152-L241)
 - [scoring.py:235-313](file://apps/api/src/workers/scoring.py#L235-L313)
-- [export.py:49-99](file://apps/api/src/services/export.py#L49-L99)
 - [search.py:14-98](file://apps/api/src/api/v1/search.py#L14-L98)
+- [recordings.py:18-124](file://apps/api/src/api/v1/recordings.py#L18-L124)
+- [recording.py:31-68](file://apps/api/src/services/recording.py#L31-L68)
 
 ## Performance Considerations
 - Asynchronous pipeline: Use Celery tasks to process audio through transcription, diarization, segmentation, analysis, and scoring without blocking the API.
@@ -402,32 +435,34 @@ SRCH["api/v1/search.py"] --> TRAN
 - Eager loading: The conversation endpoint uses selectinload to reduce N+1 queries when loading analysis.
 - Confidence threshold: AI analysis results below a minimum confidence threshold are not persisted, reducing noise in downstream analytics.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 - Conversation not found:
   - Verify the conversation_id format (UUID) and existence in the database.
   - Check that the requesting user has appropriate salesperson permissions.
 - Analysis not found:
   - Confirm that the analysis task has completed and the confidence threshold was met.
-  - Ensure transcript segments exist for the conversation’s time window.
+  - Ensure transcript segments exist for the conversation's time window.
 - Search yields no results:
   - Confirm embeddings exist for transcript segments.
   - Adjust date filters or query terms.
-- Export missing scores:
-  - Scoring runs after analysis; ensure the recording reached the scoring stage.
-  - Verify that ConversationAnalysis.scores contains the expected keys.
+- Recording management issues:
+  - Verify recording_id format (UUID) and existence in the database.
+  - Check that the requesting user has appropriate roles (operator for listing, salesperson for viewing).
+  - Ensure recordings have completed processing before requesting analysis.
+
+**Updated** Added troubleshooting guidance for recording management endpoints.
 
 **Section sources**
 - [conversations.py:20-22](file://apps/api/src/api/v1/conversations.py#L20-L22)
 - [conversations.py:32-34](file://apps/api/src/api/v1/conversations.py#L32-L34)
 - [analysis.py:205-212](file://apps/api/src/workers/analysis.py#L205-L212)
 - [scoring.py:250-261](file://apps/api/src/workers/scoring.py#L250-L261)
+- [recordings.py:86-124](file://apps/api/src/api/v1/recordings.py#L86-L124)
 
 ## Conclusion
-The Conversation Analysis API provides robust endpoints for retrieving conversation metadata and AI-generated insights, alongside a powerful asynchronous pipeline for processing audio into structured business intelligence. With semantic search, export capabilities, and performance metrics, it enables comprehensive analysis and coaching recommendations while maintaining conversation-level permissions and data privacy controls.
+The Conversation Analysis API provides robust endpoints for retrieving conversation metadata and AI-generated insights, alongside a powerful asynchronous pipeline for processing audio into structured business intelligence. With semantic search, recording management capabilities, and performance metrics, it enables comprehensive analysis and coaching recommendations while maintaining conversation-level permissions and data privacy controls.
 
-[No sources needed since this section summarizes without analyzing specific files]
+**Updated** Removed references to dropped CSV export and conversation summarization features.
 
 ## Appendices
 
@@ -442,16 +477,38 @@ The Conversation Analysis API provides robust endpoints for retrieving conversat
   - Query params: q, date_from, date_to, store_id, salesperson_id, outcome, limit
   - Response: array of records with conversation, analysis, recording, segments, similarity_score
   - Permissions: salesperson
+- GET /api/v1/recordings
+  - Query params: page, page_size, status, salesperson_id, date_from, date_to
+  - Response: paginated recordings list
+  - Permissions: operator
+- GET /api/v1/recordings/{recording_id}
+  - Response: RecordingResponse
+  - Permissions: salesperson
+- GET /api/v1/recordings/{recording_id}/status
+  - Response: RecordingStatusResponse
+  - Permissions: salesperson
+- POST /api/v1/recordings/{recording_id}/reprocess
+  - Response: RecordingResponse
+  - Permissions: brand admin
+
+**Updated** Added recording management endpoints to the reference.
 
 **Section sources**
 - [conversations.py:13-34](file://apps/api/src/api/v1/conversations.py#L13-L34)
 - [search.py:14-98](file://apps/api/src/api/v1/search.py#L14-L98)
+- [recordings.py:21-124](file://apps/api/src/api/v1/recordings.py#L21-L124)
 
 ### Request/Response Schemas
 - ConversationResponse
-  - Fields: id, recording_id, start_time, end_time, segment_count, summary, created_at
+  - Fields: id, recording_id, start_time, end_time, segment_count, created_at
 - ConversationAnalysisResponse
-  - Fields: id, conversation_id, intent, products, budget, objections, competitors, closing_attempt, outcome, confidence, scores, summary, coaching_notes, created_at
+  - Fields: id, conversation_id, intent, products, budget, objections, competitors, closing_attempt, outcome, confidence, scores, created_at
+- RecordingResponse
+  - Fields: id, salesperson_id, file_url, file_size, duration_seconds, status, uploaded_at, recorded_at, error_message
+- RecordingStatusResponse
+  - Fields: id, status, error_message
+
+**Updated** Added recording-related schemas.
 
 **Section sources**
 - [conversation.py:4-33](file://apps/api/src/schemas/conversation.py#L4-L33)
@@ -462,15 +519,28 @@ The Conversation Analysis API provides robust endpoints for retrieving conversat
   - Entity filters (store_id, salesperson_id)
   - Outcome filter (SALE_MADE, LOST, FOLLOW_UP_NEEDED)
   - Limit parameter (1–100)
+- Recording listing endpoint supports:
+  - Status filter (status)
+  - Salesperson filter (salesperson_id)
+  - Date range filters (date_from, date_to)
+  - Pagination parameters (page, page_size)
+
+**Updated** Added recording filtering capabilities.
 
 **Section sources**
 - [search.py:17-22](file://apps/api/src/api/v1/search.py#L17-L22)
+- [recordings.py:22-29](file://apps/api/src/api/v1/recordings.py#L22-L29)
 
 ### Conversation-Level Permissions and Privacy Controls
-- Authentication requirement: salesperson role for all conversation endpoints
+- Authentication requirement: salesperson role for conversation endpoints
+- Authentication requirement: operator role for recording listing endpoint
+- Authentication requirement: brand admin role for recording reprocessing
 - Data visibility: responses include only permitted fields; sensitive fields are not exposed beyond schema definitions
-- Export controls: CSV export requires appropriate access to view and download analysis results
+- Recording privacy: recording files are protected by authentication; only authorized users can access them
+
+**Updated** Added recording management permission requirements.
 
 **Section sources**
 - [conversations.py:4-7](file://apps/api/src/api/v1/conversations.py#L4-L7)
+- [recordings.py:6,30,114](file://apps/api/src/api/v1/recordings.py#L6-L7,L30,L114)
 - [search.py:24-24](file://apps/api/src/api/v1/search.py#L24-L24)

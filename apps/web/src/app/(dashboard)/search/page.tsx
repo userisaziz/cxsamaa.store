@@ -56,10 +56,10 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Semantic Search</h1>
-        <p className="text-sm text-steel">
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Semantic Search</h1>
+        <p className="mt-1 text-sm text-steel">
           Search across all conversation transcripts using natural language
         </p>
       </div>
@@ -109,7 +109,7 @@ export default function SearchPage() {
 
       {!isLoading && searchTerm && results.length === 0 && (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-steel">
             No results found for &quot;{searchTerm}&quot;
           </CardContent>
         </Card>

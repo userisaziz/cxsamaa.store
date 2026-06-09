@@ -22,10 +22,10 @@ export default function SalespeoplePage() {
   });
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Salespeople</h1>
-        <p className="text-sm text-steel">Manage sales team members</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">Salespeople</h1>
+        <p className="mt-1 text-sm text-steel">Manage sales team members</p>
       </div>
 
       <Card>
@@ -62,14 +62,14 @@ export default function SalespeoplePage() {
                         {sp.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{sp.role || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{sp.shift || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{sp.device_number || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{sp.email || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.role || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.shift || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.device_number || "—"}</TableCell>
+                    <TableCell className="text-steel">{sp.email || "—"}</TableCell>
                   </TableRow>
                 )) ?? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={5} className="text-center text-steel py-12">
                       No salespeople found
                     </TableCell>
                   </TableRow>

@@ -1,0 +1,1 @@
+Turborepo for monorepo task orchestration; Docker Compose for shared PostgreSQL/Redis infrastructure.

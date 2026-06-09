@@ -40,19 +40,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 via-white to-white p-4">
-      <Card className="w-full max-w-md border-border shadow-sm">
-        <CardHeader className="text-center pb-2">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-sm">
+    <div
+      className="flex min-h-screen items-center justify-center p-4"
+      style={{
+        background: "linear-gradient(180deg, var(--color-hero-sky-from) 0%, var(--color-hero-sky-to) 40%, oklch(1 0 0) 100%)",
+      }}
+    >
+      <Card className="w-full max-w-md border border-border shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)] rounded-xl overflow-hidden">
+        {/* Brand accent top bar */}
+        <div className="h-1 w-full bg-brand-green" />
+        <CardHeader className="text-center pb-2 pt-8">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-sm">
             <Headphones className="h-7 w-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-semibold tracking-tight text-ink">SAMAA</CardTitle>
-          <CardDescription className="text-sm text-steel">Sales Audio Management & AI Analysis</CardDescription>
+          <CardTitle className="text-[28px] font-semibold tracking-tight text-ink leading-tight">SAMAA</CardTitle>
+          <CardDescription className="text-sm text-steel mt-1">Sales Audio Management & AI Analysis</CardDescription>
         </CardHeader>
-        <CardContent className="pt-2">
+        <CardContent className="pt-4 pb-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+              <div className="rounded-lg bg-destructive/8 p-3 text-sm text-destructive border border-destructive/20">
                 {error}
               </div>
             )}

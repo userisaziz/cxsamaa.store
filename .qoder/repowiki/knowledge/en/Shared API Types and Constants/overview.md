@@ -1,1 +1,0 @@
-Provides shared TypeScript interfaces, types, and constants for the SAMAA platform's API contracts and domain entities.

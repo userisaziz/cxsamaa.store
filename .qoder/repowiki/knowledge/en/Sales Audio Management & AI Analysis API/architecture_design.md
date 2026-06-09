@@ -1,6 +1,5 @@
-- **Web Layer**: FastAPI application (`src/main.py`) exposing a v1 REST API (`src/api/v1/`) with JWT-based authentication and role-dependent access control via dependency injection (`src/api/deps.py`).
-- **Service Layer**: Business logic is encapsulated in `src/services/`, handling CRUD operations for entities like recordings, brands, and stores, while decoupling HTTP handlers from data access.
-- **Data Layer**: Asynchronous PostgreSQL access using SQLAlchemy 2.0 (`src/database.py`) with Alembic for schema migrations. Pydantic models in `src/schemas/` define strict API contracts.
-- **Async Worker Pipeline**: A Celery-based background processing system (`src/workers/`) orchestrated via Redis. It executes a chained pipeline: preprocessing → STT (NVIDIA Parakeet) → diarization → segmentation → LLM analysis (Llama 3.3) → scoring.
-- **AI Integration**: A dedicated `src/ai/` module provides wrappers for NVIDIA NIM APIs, implementing retry logic and standardized response parsing for STT and LLM tasks.
-- **Storage Abstraction**: A pluggable storage interface (`src/storage/base.py`) currently implemented as local filesystem storage, designed to support future cloud backends.
+- Entry point `src/main.py` initializes a FastAPI application and mounts the v1 router defined in `src/api/v1/router.py`.
+- Dependency injection in `src/api/deps.py` enforces JWT-based authentication and role-based access control (RBAC) for protected endpoints.
+- Business logic is encapsulated in `src/services/`, while `src/models/` defines SQLAlchemy ORM entities and `src/schemas/` handles Pydantic validation.
+- Asynchronous audio processing is offloaded to Celery workers (`src/workers/`) using a Redis broker, executing a chained pipeline of preprocessing, STT, diarization, segmentation, and AI analysis.
+- Database interactions use async SQLAlchemy with PostgreSQL, managed via `src/database.py` and migrated through Alembic.

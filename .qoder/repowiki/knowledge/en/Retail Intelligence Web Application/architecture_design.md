@@ -1,0 +1,4 @@
+- Leverages Next.js App Router with route groups (`(auth)`, `(dashboard)`, `(operations)`) to enforce layout isolation and modular feature development.
+- Centralizes client-side session management via `middleware.ts` (pass-through) and `AuthGuard` components, relying on `localStorage` for token persistence rather than HTTP-only cookies.
+- Provides a unified `api-client` with automatic JWT refresh logic, serving as the single data-fetching contract for all dashboard and conversation modules.
+- Uses a root `Providers` component to inject global context (theme, auth state) into the application shell, ensuring consistent state access across nested layouts.

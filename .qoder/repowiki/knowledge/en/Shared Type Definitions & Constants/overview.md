@@ -1,0 +1,1 @@
+Provides centralized TypeScript interfaces and constants for API contracts, domain entities, and platform-wide enums.

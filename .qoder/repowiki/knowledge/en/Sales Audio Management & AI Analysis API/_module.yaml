@@ -6,7 +6,7 @@ scope:
 source_files: []
 depends_on: []
 related_to:
-    - path: web_app/dashboard_conversations
-    - path: web_app/dashboard_management
-    - path: web_app/auth
     - path: shared_package
+    - path: web_app/dashboard_management
+    - path: web_app/dashboard_conversations
+    - path: web_app

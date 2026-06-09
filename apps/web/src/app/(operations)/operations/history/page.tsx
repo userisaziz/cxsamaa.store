@@ -101,13 +101,13 @@ export default function OperationsHistoryPage() {
   const totalPages = data?.total_pages ?? 1;
 
   return (
-    <div className="space-y-6 p-8">
+    <div className="space-y-8 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink leading-tight">
             Upload History
           </h1>
-          <p className="text-sm text-steel">
+          <p className="mt-1 text-sm text-steel">
             {data?.total ?? 0} recordings found
           </p>
         </div>
@@ -118,7 +118,7 @@ export default function OperationsHistoryPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap rounded-lg border border-border bg-card p-4">
         <Select
           value={statusFilter}
           onValueChange={(v) => {
@@ -148,7 +148,7 @@ export default function OperationsHistoryPage() {
               setDateFrom(e.target.value);
               setPage(1);
             }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -160,7 +160,7 @@ export default function OperationsHistoryPage() {
               setDateTo(e.target.value);
               setPage(1);
             }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
           />
         </div>
       </div>
