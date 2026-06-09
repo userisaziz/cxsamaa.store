@@ -7,6 +7,7 @@ from typing import Any
 import riva.client
 import riva.client.proto.riva_asr_pb2 as rasr
 import riva.client.proto.riva_asr_pb2_grpc as rasr_srv
+import riva.client.proto.riva_audio_pb2 as raudio
 
 from src.config import settings
 
@@ -67,9 +68,10 @@ class RivaSTTClient:
 
             # Build recognition config
             config = rasr.RecognitionConfig(
-                encoding=rasr.AudioEncoding.LINEAR_PCM,  # 16-bit PCM
+                encoding=raudio.AudioEncoding.LINEAR_PCM,  # 16-bit PCM
                 sample_rate_hertz=16000,  # 16kHz
                 audio_channel_count=1,  # Mono
+                language_code="en-US",  # Default to US English
                 max_alternatives=1,
                 profanity_filter=False,
                 enable_automatic_punctuation=True,
@@ -79,7 +81,7 @@ class RivaSTTClient:
             # Build recognition request
             request = rasr.RecognizeRequest(
                 config=config,
-                audio=rasr.RecognitionAudio(content=audio_data),
+                audio=audio_data,  # Raw bytes directly
             )
 
             # Make gRPC call with metadata
