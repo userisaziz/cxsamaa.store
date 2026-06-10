@@ -8,13 +8,14 @@ SAMAA is a full-stack platform for uploading, transcribing, diarizing, analyzing
 
 ### Authentication
 
-![Login View](screenshots/auth-view/ops-page.png)
+![Login View](screenshots/auth-view/auth.png)
 
-### Dashboard Views
+### Interaction Details
 
-![Brand Dashboard 1](screenshots/dashboard-view/brand-1.png)
-![Brand Dashboard 2](screenshots/dashboard-view/brand-2.png)
-![Brand Dashboard 3](screenshots/dashboard-view/brand-3.png)
+![Interaction Details 1](screenshots/dashboard-view/interaction-details-1.png)
+![Interaction Details 2](screenshots/dashboard-view/interaction-details-2.png)
+![Recording Details](screenshots/dashboard-view/interaction-recording-details.png)
+![Coaching View](screenshots/dashboard-view/coaching.png)
 
 ### Features
 
@@ -23,12 +24,15 @@ SAMAA is a full-stack platform for uploading, transcribing, diarizing, analyzing
 ![Salespeople List](screenshots/dashboard-view/salespeople-list.png)
 ![Stores List](screenshots/dashboard-view/stores-list.png)
 
-### Interaction Details
 
-![Interaction Details 1](screenshots/dashboard-view/interaction-details-1.png)
-![Interaction Details 2](screenshots/dashboard-view/interaction-details-2.png)
-![Recording Details](screenshots/dashboard-view/interaction-recording-details.png)
-![Coaching View](screenshots/dashboard-view/coaching.png)
+### Dashboard Views
+
+![Brand Dashboard 1](screenshots/dashboard-view/brand-1.png)
+![Brand Dashboard 2](screenshots/dashboard-view/brand-2.png)
+![Brand Dashboard 3](screenshots/dashboard-view/brand-3.png)
+
+
+
 
 ### Operations
 
