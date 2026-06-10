@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { UserResponse, LoginResponse } from "@samaa/shared";
+import { toast } from "sonner";
 
 interface AuthState {
   user: UserResponse | null;
@@ -43,6 +44,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     } else {
       set({ user: null, isAuthenticated: false, isLoading: false });
+    }
+    
+    // Listen for session expired events
+    if (typeof window !== "undefined") {
+      window.addEventListener("session-expired", (e) => {
+        const customEvent = e as CustomEvent<string>;
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        toast.error("Session expired", {
+          description: customEvent.detail,
+          duration: 6000,
+        });
+      });
     }
   },
 }));

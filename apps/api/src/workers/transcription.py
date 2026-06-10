@@ -97,6 +97,11 @@ def transcribe_audio_task(self, recording_id: str) -> str:
         chunk_duration_ms = settings.audio_chunk_duration_minutes * 60 * 1000  # 15 minutes
         overlap_ms = settings.audio_chunk_overlap_seconds * 1000  # 30 seconds
 
+        # Calculate audio duration and max chunk size
+        audio = AudioSegment.from_wav(io.BytesIO(audio_data))
+        duration_ms = len(audio)
+        max_chunk_size = settings.max_audio_chunk_bytes  # from settings
+
         if len(audio_data) <= max_chunk_size and duration_ms <= chunk_duration_ms:
             result = transcribe_audio(audio_data)
             segments = result.get("segments", [])

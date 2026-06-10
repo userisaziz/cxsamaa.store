@@ -66,11 +66,24 @@ async function request<T>(
     if (newToken) {
       return request<T>(endpoint, options, false);
     }
-    // Refresh failed — clear auth state
+    // Refresh failed — clear auth state and redirect to login
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
-    window.location.href = "/login";
+    
+    // Dispatch a custom event so auth store can update and show toast
+    if (typeof window !== "undefined") {
+      const event = new CustomEvent("session-expired", {
+        detail: "Session expired. Please sign in again.",
+      });
+      window.dispatchEvent(event);
+      
+      // Small delay to allow toast to render before navigation
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 100);
+    }
+    
     throw new ApiError(401, "Session expired");
   }
 

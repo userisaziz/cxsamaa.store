@@ -24,7 +24,9 @@ class RecordingStatusResponse(BaseModel):
     id: uuid.UUID
     status: str
     error_message: str | None = None
-
+    transcript_segment_count: int = 0
+    conversation_count: int = 0
+    
     model_config = {"from_attributes": True}
 
 

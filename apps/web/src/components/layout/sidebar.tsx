@@ -56,14 +56,14 @@ const navItems: NavItem[] = [
     roles: ["SALESPERSON"],
   },
   {
-    label: "Recordings",
-    href: "/recordings",
-    icon: Mic,
-  },
-  {
     label: "Conversations",
     href: "/conversations",
     icon: MessageSquare,
+  },
+  {
+    label: "Recordings",
+    href: "/recordings",
+    icon: Mic,
   },
   {
     label: "Search",

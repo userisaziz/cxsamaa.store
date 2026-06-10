@@ -73,10 +73,26 @@ async def get_recording_status(db: AsyncSession, recording_id: str) -> Recording
     recording = await get_recording(db, recording_id)
     if not recording:
         return None
+    
+    # Count transcript segments
+    from src.models.transcript import TranscriptSegment
+    from sqlalchemy import func
+    segment_count = await db.scalar(
+        func.count(TranscriptSegment.id).where(TranscriptSegment.recording_id == recording.id)
+    ) or 0
+    
+    # Count conversations
+    from src.models.conversation import Conversation
+    conversation_count = await db.scalar(
+        func.count(Conversation.id).where(Conversation.recording_id == recording.id)
+    ) or 0
+    
     return RecordingStatusResponse(
         id=str(recording.id),
         status=recording.status.value,
         error_message=recording.error_message,
+        transcript_segment_count=segment_count,
+        conversation_count=conversation_count,
     )
 
 
@@ -128,8 +144,9 @@ async def upload_recording(
 
 async def reprocess_recording(db: AsyncSession, recording: Recording) -> Recording:
     """Reprocess a recording by restarting the pipeline."""
-    # Only allow reprocessing if recording is in a terminal state
+    # Only allow reprocessing if recording is in UPLOADED or terminal state
     if recording.status not in [
+        RecordingStatus.UPLOADED,
         RecordingStatus.FAILED,
         RecordingStatus.COMPLETED,
     ]:
@@ -198,6 +215,14 @@ async def get_transcript(db: AsyncSession, recording_id: str) -> list[Transcript
     return list(result.scalars().all())
 
 
+async def get_recording_transcript(db: AsyncSession, recording_id: str) -> list[TranscriptSegment] | None:
+    """Get transcript segments for a recording. Returns None if recording doesn't exist."""
+    recording = await get_recording(db, recording_id)
+    if not recording:
+        return None
+    return await get_transcript(db, recording_id)
+
+
 async def get_conversations(db: AsyncSession, recording_id: str) -> list[Conversation]:
     result = await db.execute(
         select(Conversation)
@@ -207,11 +232,19 @@ async def get_conversations(db: AsyncSession, recording_id: str) -> list[Convers
     return list(result.scalars().all())
 
 
-async def get_recording_summary(db: AsyncSession, recording_id: str) -> RecordingSummaryResponse:
-    """Build a recording-level summary from all conversation analyses."""
+async def get_recording_conversations(db: AsyncSession, recording_id: str) -> list[Conversation] | None:
+    """Get conversations for a recording. Returns None if recording doesn't exist."""
     recording = await get_recording(db, recording_id)
     if not recording:
-        raise ValueError("Recording not found")
+        return None
+    return await get_conversations(db, recording_id)
+
+
+async def get_recording_summary(db: AsyncSession, recording_id: str) -> RecordingSummaryResponse | None:
+    """Build a recording-level summary from all conversation analyses. Returns None if recording doesn't exist."""
+    recording = await get_recording(db, recording_id)
+    if not recording:
+        return None
 
     # Load conversations with analysis
     result = await db.execute(

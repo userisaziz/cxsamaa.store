@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Headphones, Eye, EyeOff, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 /* ── Animated waveform bars for the brand panel ── */
 function WaveformVisual() {
@@ -74,18 +75,37 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    e.stopPropagation();
     setError("");
     setLoading(true);
 
     try {
       const data = await api.post<LoginResponse>("/auth/login", { email, password });
       login(data);
+      toast.success("Welcome back!", {
+        description: "You have successfully signed in.",
+      });
       router.push("/");
     } catch (err) {
+      console.error("Login error:", err);
       if (err instanceof ApiError) {
-        setError(err.detail);
+        const message = err.detail || "Invalid email or password";
+        setError(message);
+        toast.error("Sign in failed", {
+          description: message,
+        });
+      } else if (err instanceof Error) {
+        const message = err.message || "An unexpected error occurred";
+        setError(message);
+        toast.error("Sign in failed", {
+          description: message,
+        });
       } else {
-        setError("An unexpected error occurred");
+        const message = "An unexpected error occurred";
+        setError(message);
+        toast.error("Sign in failed", {
+          description: message,
+        });
       }
     } finally {
       setLoading(false);

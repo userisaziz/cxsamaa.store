@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # Audio Chunking for Long Recordings
     audio_chunk_duration_minutes: int = 15  # Process long audio in 15-min chunks
     audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
+    max_audio_chunk_bytes: int = 50 * 1024 * 1024  # 50MB max per chunk
 
     # Sortformer Diarization (Future - NVIDIA)
     diarization_use_sortformer: bool = False  # Enable when NVIDIA provides endpoint

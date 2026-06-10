@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { Toaster } from "sonner";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -25,6 +26,12 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          expand
+        />
       {/* impeccable-live-start */}
 <script src="http://localhost:8400/live.js"></script>
 {/* impeccable-live-end */}

@@ -7,10 +7,20 @@ from starlette.responses import FileResponse
 from src.api.deps import require_brand_admin_up, require_operator_up, require_salesperson_up
 from src.database import get_db
 from src.models.user import User
-from src.schemas.recording import PaginatedRecordingsResponse, RecordingResponse, RecordingStatusResponse
+from src.schemas.recording import (
+    PaginatedRecordingsResponse,
+    RecordingResponse,
+    RecordingStatusResponse,
+    RecordingSummaryResponse,
+    TranscriptSegmentResponse,
+)
+from src.schemas.conversation import ConversationResponse
 from src.services.recording import (
     get_recording,
     get_recording_status,
+    get_recording_summary,
+    get_recording_transcript,
+    get_recording_conversations,
     list_recordings,
     reprocess_recording,
     upload_recording,
@@ -127,6 +137,42 @@ async def get_recording_status_endpoint(
     if not status_result:
         raise HTTPException(status_code=404, detail="Recording not found")
     return status_result
+
+
+@router.get("/{recording_id}/transcript", response_model=list[TranscriptSegmentResponse])
+async def get_recording_transcript_endpoint(
+    recording_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_salesperson_up),
+):
+    segments = await get_recording_transcript(db, recording_id)
+    if segments is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return segments
+
+
+@router.get("/{recording_id}/conversations", response_model=list[ConversationResponse])
+async def get_recording_conversations_endpoint(
+    recording_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_salesperson_up),
+):
+    conversations = await get_recording_conversations(db, recording_id)
+    if conversations is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return conversations
+
+
+@router.get("/{recording_id}/summary", response_model=RecordingSummaryResponse)
+async def get_recording_summary_endpoint(
+    recording_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_salesperson_up),
+):
+    summary = await get_recording_summary(db, recording_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return summary
 
 
 @router.post("/{recording_id}/reprocess", response_model=RecordingResponse)

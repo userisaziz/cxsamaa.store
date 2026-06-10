@@ -144,8 +144,8 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 \
 PIDS+=($!)
 echo -e "${GREEN}  ✓ FastAPI      → http://localhost:8000  (docs: /docs)${NC}"
 
-# Celery worker
-celery -A src.workers.celery_app worker --loglevel=info --concurrency=2 \
+# Celery worker (solo pool for macOS fork safety)
+celery -A src.workers.celery_app worker --loglevel=info --pool=solo \
     > "$LOG_DIR/celery.log" 2>&1 &
 PIDS+=($!)
 echo -e "${GREEN}  ✓ Celery       → processing pipeline tasks${NC}"

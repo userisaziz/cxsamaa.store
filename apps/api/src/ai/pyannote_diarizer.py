@@ -66,9 +66,10 @@ class PyannoteDiarizer:
         logger.info(f"Loading pyannote model '{model_name}' on {self.device}")
         
         # Load pipeline with authentication
+        # Note: use_auth_token deprecated in pyannote.audio 3.x, use token instead
         self.pipeline = Pipeline.from_pretrained(
             model_name,
-            use_auth_token=self.huggingface_token,
+            token=self.huggingface_token,
         )
         
         # Move to device

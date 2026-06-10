@@ -131,9 +131,9 @@ export default function RecordingsPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4 sm:pb-6">
         <div>
-          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Recordings</h1>
+          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Audio Sources</h1>
           <p className="mt-1 text-sm text-steel">
-            <span className="font-mono">{data?.total ?? 0}</span> total recordings
+            <span className="font-mono">{data?.total ?? 0}</span> uploaded audio files · <Link href="/conversations" className="text-brand-green-deep hover:underline font-medium">View all conversations →</Link>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -218,11 +218,9 @@ export default function RecordingsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Recorded</TableHead>
-                    <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Uploaded</TableHead>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Duration</TableHead>
-                    <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Format</TableHead>
-                    <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Size</TableHead>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Status</TableHead>
+                    <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Conversations</TableHead>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -230,18 +228,20 @@ export default function RecordingsPage() {
                   {recordings.map((rec) => (
                     <TableRow key={rec.id}>
                       <TableCell className="text-steel font-mono text-[13px]">
-                        {rec.recorded_at ? formatDate(rec.recorded_at) : "—"}
-                      </TableCell>
-                      <TableCell className="text-steel font-mono text-[13px]">
-                        {formatDate(rec.uploaded_at)}
+                        {rec.recorded_at ? formatDate(rec.recorded_at) : formatDate(rec.uploaded_at)}
                       </TableCell>
                       <TableCell className="font-mono text-sm">{formatDuration(rec.duration_seconds)}</TableCell>
-                      <TableCell className="text-steel">{rec.format}</TableCell>
-                      <TableCell className="text-steel font-mono text-sm">
-                        {rec.file_size ? `${(rec.file_size / 1024 / 1024).toFixed(1)} MB` : "—"}
-                      </TableCell>
                       <TableCell>
                         <StatusBadge status={rec.status} />
+                      </TableCell>
+                      <TableCell className="text-steel text-sm">
+                        {rec.status === "COMPLETED" ? (
+                          <Link href={`/recordings/${rec.id}`} className="text-brand-green-deep hover:underline">
+                            View conversations
+                          </Link>
+                        ) : (
+                          <span className="text-stone">Processing...</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -249,22 +249,21 @@ export default function RecordingsPage() {
                             <Link href={`/recordings/${rec.id}`}>
                               <Button variant="ghost" size="sm">
                                 <Eye className="mr-1 h-4 w-4" />
-                                View
+                                Details
                               </Button>
                             </Link>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              if (rec.status === "FAILED" || rec.status === "UPLOADED") {
+                          {(rec.status === "FAILED" || rec.status === "UPLOADED") && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
                                 api.post(`/recordings/${rec.id}/reprocess`).then(() => refetch());
-                              }
-                            }}
-                            disabled={rec.status === "COMPLETED"}
-                          >
-                            {rec.status === "COMPLETED" ? "Done" : "Reprocess"}
-                          </Button>
+                              }}
+                            >
+                              Reprocess
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -303,8 +302,10 @@ export default function RecordingsPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Inbox className="h-10 w-10 text-stone/40 mb-3" />
-              <p className="text-sm font-medium text-steel">No recordings found</p>
-              <p className="text-xs text-stone mt-1">Try adjusting your filters or upload new audio files.</p>
+              <p className="text-sm font-medium text-steel">No audio sources found</p>
+              <p className="text-xs text-stone mt-1">
+                Upload audio files to start analyzing customer conversations, or <Link href="/conversations" className="text-brand-green-deep hover:underline">view all conversations →</Link>
+              </p>
             </div>
           )}
         </CardContent>
