@@ -33,22 +33,18 @@ class RivaSTTClient:
     def _to_seconds(t) -> float:
         """Convert a Riva time value to seconds.
 
-        Riva may return:
-        - google.protobuf.Duration (with .seconds/.nanos fields)
-        - A float already in seconds
-        - An int/float in milliseconds (values > typical audio duration)
+        Riva returns either:
+        - google.protobuf.Duration (with .seconds/.nanos fields) — already in seconds
+        - int values in **milliseconds** (Riva gRPC convention)
+        - float values — assumed to be seconds
 
-        Heuristic: if the raw value is > 10000 and has no .seconds attr,
-        assume milliseconds and divide by 1000.  A 10000-second audio
-        file (~2.8 hours) is extremely unlikely for retail recordings.
+        Detection: if it's an int (no decimal point), divide by 1000.
         """
         if hasattr(t, 'seconds'):
             return t.seconds + getattr(t, 'nanos', 0) / 1e9
-        val = float(t)
-        if val > 10000:
-            # Almost certainly milliseconds, not seconds
-            return val / 1000.0
-        return val
+        if isinstance(t, int):
+            return t / 1000.0
+        return float(t)
 
     def transcribe_audio(self, audio_bytes: bytes) -> list[dict[str, Any]]:
         """Transcribe audio using NVIDIA Riva Parakeet model via gRPC.
