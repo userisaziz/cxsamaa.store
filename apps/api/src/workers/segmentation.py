@@ -15,22 +15,24 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _get_labeled_segments_sync(recording_id: str) -> list[dict]:
     """Load transcript segments with speaker labels from DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         rows = (
             session.query(TranscriptSegment)
             .filter(TranscriptSegment.recording_id == uuid.UUID(recording_id))
             .order_by(TranscriptSegment.start_time)
             .all()
         )
-        segments = [
+        return [
             {
                 "start": row.start_time,
                 "end": row.end_time,
@@ -39,38 +41,25 @@ def _get_labeled_segments_sync(recording_id: str) -> list[dict]:
             }
             for row in rows
         ]
-    engine.dispose()
-    return segments
 
 
 def _get_silence_gaps_sync(recording_id: str) -> list[tuple[float, float]]:
     """Load silence gaps from recording.silence_gaps JSONB field."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
     from src.models.recording import Recording
 
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(Recording.id == uuid.UUID(recording_id)).first()
         if recording and recording.silence_gaps:
             # Convert from list of dicts back to list of tuples
-            gaps = [(g["start"], g["end"]) for g in recording.silence_gaps]
-            engine.dispose()
-            return gaps
-    engine.dispose()
+            return [(g["start"], g["end"]) for g in recording.silence_gaps]
     return []
 
 
 def _store_conversations_sync(recording_id: str, conversations: list[dict]):
     """Store conversation records in DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
     from src.models.recording import Recording
 
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Look up the parent recording to copy denormalized fields
         recording = session.query(Recording).filter(
             Recording.id == uuid.UUID(recording_id)
@@ -96,8 +85,7 @@ def _store_conversations_sync(recording_id: str, conversations: list[dict]):
             session.add(conversation)
 
         session.commit()
-        logger.info(f"[{recording_id}] Stored {len(conversations)} conversations")
-    engine.dispose()
+        logger.info("[%s] Stored %d conversations", recording_id, len(conversations))
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="segment_conversations")
@@ -110,7 +98,7 @@ def segment_conversations(self, recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info(f"[{recording_id}] Starting conversation segmentation")
+    logger.info("[%s] Starting conversation segmentation", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.SEGMENTING)
 
     try:
@@ -121,22 +109,22 @@ def segment_conversations(self, recording_id: str) -> str:
         # Load labeled transcript segments
         labeled_segments = _get_labeled_segments_sync(recording_id)
         if not labeled_segments:
-            logger.warning(f"[{recording_id}] No transcript segments found — cannot segment")
+            logger.warning("[%s] No transcript segments found — cannot segment", recording_id)
             _update_recording_status_sync(recording_id, RecordingStatus.FAILED, "No transcript segments")
             return recording_id
 
-        logger.info(f"[{recording_id}] Segmenting {len(labeled_segments)} transcript segments")
+        logger.info("[%s] Segmenting %d transcript segments", recording_id, len(labeled_segments))
 
         # Load silence gaps from preprocessing
         silence_gaps = _get_silence_gaps_sync(recording_id)
         if silence_gaps:
-            logger.info(f"[{recording_id}] Using {len(silence_gaps)} silence gaps from preprocessing")
+            logger.info("[%s] Using %d silence gaps from preprocessing", recording_id, len(silence_gaps))
 
         # Run segmentation
         conversations = segment_conversations_ai(labeled_segments, silence_gaps=silence_gaps if silence_gaps else None)
 
         if not conversations:
-            logger.warning(f"[{recording_id}] No conversations detected after segmentation")
+            logger.warning("[%s] No conversations detected after segmentation", recording_id)
             # Store empty — mark as completed with 0 conversations
             conversations = []
 
@@ -144,13 +132,17 @@ def segment_conversations(self, recording_id: str) -> str:
         _store_conversations_sync(recording_id, conversations)
 
         logger.info(
-            f"[{recording_id}] Segmentation complete: {len(conversations)} conversations detected"
+            "[%s] Segmentation complete: %d conversations detected",
+            recording_id,
+            len(conversations),
         )
+
+        _update_recording_status_sync(recording_id, RecordingStatus.SEGMENTED)
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Segmentation failed: {exc}")
-        if self.request.retries >= self.max_retries:
-
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Segmentation failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

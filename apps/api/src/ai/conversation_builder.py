@@ -5,6 +5,7 @@ conversation turns based on speaker continuity and gap detection. A turn
 ends when the speaker changes or there's a gap > threshold seconds.
 """
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -139,8 +140,6 @@ def _clean_text_spacing(text: str) -> str:
     Returns:
         Cleaned text with proper spacing
     """
-    import re
-
     # Remove space before punctuation (e.g., "hello , world" → "hello, world")
     text = re.sub(r'\s+([,.!?;:])', r'\1', text)
 

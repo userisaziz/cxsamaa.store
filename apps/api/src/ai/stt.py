@@ -29,6 +29,27 @@ class RivaSTTClient:
             ("authorization", f"Bearer {self.api_key}"),
         ]
 
+    @staticmethod
+    def _to_seconds(t) -> float:
+        """Convert a Riva time value to seconds.
+
+        Riva may return:
+        - google.protobuf.Duration (with .seconds/.nanos fields)
+        - A float already in seconds
+        - An int/float in milliseconds (values > typical audio duration)
+
+        Heuristic: if the raw value is > 10000 and has no .seconds attr,
+        assume milliseconds and divide by 1000.  A 10000-second audio
+        file (~2.8 hours) is extremely unlikely for retail recordings.
+        """
+        if hasattr(t, 'seconds'):
+            return t.seconds + getattr(t, 'nanos', 0) / 1e9
+        val = float(t)
+        if val > 10000:
+            # Almost certainly milliseconds, not seconds
+            return val / 1000.0
+        return val
+
     def transcribe_audio(self, audio_bytes: bytes) -> list[dict[str, Any]]:
         """Transcribe audio using NVIDIA Riva Parakeet model via gRPC.
 
@@ -129,16 +150,28 @@ class RivaSTTClient:
             if hasattr(alternative, 'words') and alternative.words:
                 # Group words into segments based on pause gaps
                 words = alternative.words
+
+                # Debug: log raw timestamp type/range for first few words
+                if words:
+                    raw_start = words[0].start_time
+                    raw_end = words[-1].end_time
+                    logger.info(
+                        f"Riva word timestamps — type: {type(raw_start).__name__}, "
+                        f"first start raw={raw_start}, last end raw={raw_end}, "
+                        f"first start seconds={self._to_seconds(raw_start):.3f}, "
+                        f"last end seconds={self._to_seconds(raw_end):.3f}"
+                    )
+
                 segment_words = []
-                # Riva returns google.protobuf.Duration — read seconds + nanos directly
-                segment_start = words[0].start_time.seconds + words[0].start_time.nanos / 1e9
+                # Riva may return Duration proto (.seconds/.nanos) or plain int
+                segment_start = self._to_seconds(words[0].start_time)
 
                 for i, word in enumerate(words):
                     segment_words.append(word.word)
 
                     # Extract word-level data with confidence
-                    word_start = word.start_time.seconds + word.start_time.nanos / 1e9
-                    word_end = word.end_time.seconds + word.end_time.nanos / 1e9
+                    word_start = self._to_seconds(word.start_time)
+                    word_end = self._to_seconds(word.end_time)
                     word_confidence = getattr(word, 'confidence', 0.85)  # Default 0.85 if not available
 
                     all_words.append({
@@ -150,7 +183,7 @@ class RivaSTTClient:
 
                     # Check if next word has a large time gap (>1s pause = new segment)
                     if i < len(words) - 1:
-                        next_start = words[i + 1].start_time.seconds + words[i + 1].start_time.nanos / 1e9
+                        next_start = self._to_seconds(words[i + 1].start_time)
                         gap = next_start - word_end
                         if gap > 1.0:  # 1 second pause
                             segment_text = " ".join(segment_words)
@@ -165,7 +198,7 @@ class RivaSTTClient:
                 # Add remaining words as final segment
                 if segment_words:
                     segment_text = " ".join(segment_words)
-                    last_end = words[-1].end_time.seconds + words[-1].end_time.nanos / 1e9
+                    last_end = self._to_seconds(words[-1].end_time)
                     segments.append({
                         "start": segment_start,
                         "end": last_end,

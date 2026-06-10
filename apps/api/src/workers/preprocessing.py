@@ -4,7 +4,7 @@ import os
 import tempfile
 import uuid
 
-from pydub import AudioSegment, silence
+from pydub import AudioSegment
 
 from src.config import settings
 from src.models.recording import Recording, RecordingStatus
@@ -12,6 +12,13 @@ from src.storage.local import get_storage
 from src.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
 
 # Preprocessing constants
 TARGET_SAMPLE_RATE = 16000
@@ -25,64 +32,47 @@ TARGET_FORMAT = "wav"
 # Sync DB helpers (Celery workers run in sync context)
 # ---------------------------------------------------------------------------
 
-def _get_sync_session():
-    """Create a sync DB engine + session factory."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session, sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    return sessionmaker(bind=engine), engine
-
-
 def _update_recording_status_sync(recording_id: str, status: RecordingStatus, error: str | None = None):
     """Update recording status using sync DB session."""
-    SessionLocal, engine = _get_sync_session()
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(Recording.id == uuid.UUID(recording_id)).first()
         if recording:
             recording.status = status
             if error:
                 recording.error_message = error
         session.commit()
-    engine.dispose()
 
 
 def _get_recording_sync(recording_id: str) -> dict | None:
     """Get recording data using sync DB session."""
-    SessionLocal, engine = _get_sync_session()
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(Recording.id == uuid.UUID(recording_id)).first()
-        if recording:
-            return {
-                "id": str(recording.id),
-                "file_url": recording.file_url,
-                "format": recording.format,
-            }
-    engine.dispose()
-    return None
+        if not recording:
+            return None
+        return {
+            "id": str(recording.id),
+            "file_url": recording.file_url,
+            "format": recording.format,
+        }
 
 
 def _update_recording_duration_sync(recording_id: str, duration_seconds: int):
     """Update recording duration using sync DB session."""
-    SessionLocal, engine = _get_sync_session()
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(Recording.id == uuid.UUID(recording_id)).first()
         if recording:
             recording.duration_seconds = duration_seconds
         session.commit()
-    engine.dispose()
 
 
 def _store_silence_gaps_sync(recording_id: str, silence_gaps: list[tuple[float, float]]):
     """Store silence gaps in recording.silence_gaps JSONB field."""
-    SessionLocal, engine = _get_sync_session()
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(Recording.id == uuid.UUID(recording_id)).first()
         if recording:
             # Convert to list of dicts for JSONB storage
             recording.silence_gaps = [{"start": s / 1000.0, "end": e / 1000.0} for s, e in silence_gaps]
         session.commit()
-    engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +99,7 @@ def preprocess_audio(self, recording_id: str) -> str:
 
     Returns the recording_id for the next pipeline stage.
     """
-    logger.info(f"[{recording_id}] Starting audio preprocessing")
+    logger.info("[%s] Starting audio preprocessing", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.PREPROCESSING)
 
     try:
@@ -122,7 +112,7 @@ def preprocess_audio(self, recording_id: str) -> str:
 
         # Download original audio
         file_url = recording["file_url"]
-        logger.info(f"[{recording_id}] Downloading audio from {file_url}")
+        logger.info("[%s] Downloading audio from %s", recording_id, file_url)
         audio_data = _download_audio_sync(storage, file_url)
 
         # Process audio in a temp directory
@@ -137,7 +127,7 @@ def preprocess_audio(self, recording_id: str) -> str:
                 f.write(audio_data)
 
             # Convert to WAV via ffmpeg subprocess (avoids pydub subprocess hang in Celery)
-            logger.info(f"[{recording_id}] Converting audio to WAV via ffmpeg")
+            logger.info("[%s] Converting audio to WAV via ffmpeg", recording_id)
             import subprocess
             result = subprocess.run(
                 ["ffmpeg", "-y", "-i", input_path, "-ac", "1", "-ar", str(TARGET_SAMPLE_RATE), "-f", "wav", output_path],
@@ -150,26 +140,26 @@ def preprocess_audio(self, recording_id: str) -> str:
                 raise RuntimeError(f"ffmpeg conversion failed: {result.stderr.decode()}")
 
             # Load preprocessed WAV
-            logger.info(f"[{recording_id}] Loading preprocessed WAV")
+            logger.info("[%s] Loading preprocessed WAV", recording_id)
             audio = AudioSegment.from_wav(output_path)
 
             # Convert to mono
-            logger.info(f"[{recording_id}] Converting to mono (channels: {audio.channels})")
+            logger.info("[%s] Converting to mono (channels: %d)", recording_id, audio.channels)
             if audio.channels > 1:
                 audio = audio.set_channels(TARGET_CHANNELS)
 
             # Resample to 16kHz
             if audio.frame_rate != TARGET_SAMPLE_RATE:
-                logger.info(f"[{recording_id}] Resampling {audio.frame_rate}Hz → {TARGET_SAMPLE_RATE}Hz")
+                logger.info("[%s] Resampling %dHz → %dHz", recording_id, audio.frame_rate, TARGET_SAMPLE_RATE)
                 audio = audio.set_frame_rate(TARGET_SAMPLE_RATE)
 
             # Normalize volume (target -20 dBFS)
-            logger.info(f"[{recording_id}] Normalizing volume (current: {audio.dBFS:.1f} dBFS)")
+            logger.info("[%s] Normalizing volume (current: %.1f dBFS)", recording_id, audio.dBFS)
             change_in_dbfs = -20.0 - audio.dBFS
             audio = audio.apply_gain(change_in_dbfs)
 
             # Export preprocessed audio
-            logger.info(f"[{recording_id}] Exporting preprocessed audio")
+            logger.info("[%s] Exporting preprocessed audio", recording_id)
             audio.export(output_path, format=TARGET_FORMAT, parameters=["-ar", str(TARGET_SAMPLE_RATE)])
 
             # Read preprocessed audio
@@ -185,14 +175,17 @@ def preprocess_audio(self, recording_id: str) -> str:
             _update_recording_duration_sync(recording_id, duration_seconds)
 
             logger.info(
-                f"[{recording_id}] Preprocessing complete. "
-                f"Duration: {duration_seconds}s, Size: {len(preprocessed_data)} bytes"
+                "[%s] Preprocessing complete. Duration: %ds, Size: %d bytes",
+                recording_id,
+                duration_seconds,
+                len(preprocessed_data),
             )
 
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Preprocessing failed: {exc}")
-        if self.request.retries >= self.max_retries:
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Preprocessing failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

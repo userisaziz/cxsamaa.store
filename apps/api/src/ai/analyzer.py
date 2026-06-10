@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
+from src.ai.utils import format_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ def analyze_conversation(
         return None
 
     # Format conversation for the prompt
-    transcript_text = _format_transcript(conversation_segments)
+    transcript_text = format_transcript(conversation_segments)
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -113,6 +114,15 @@ def analyze_conversation(
                     continue
                 return None
 
+            # Enforce minimum confidence threshold (PRD AI-06)
+            if analysis["confidence"] < MIN_CONFIDENCE_THRESHOLD:
+                logger.warning(
+                    "Analysis confidence %d below threshold %d — discarding",
+                    analysis["confidence"],
+                    MIN_CONFIDENCE_THRESHOLD,
+                )
+                return None
+
             return analysis
 
         except NVIDIAAPIError as exc:
@@ -123,21 +133,6 @@ def analyze_conversation(
         except Exception as exc:
             logger.error(f"Unexpected error during analysis: {exc}")
             return None
-
-    return None
-
-
-def _format_transcript(segments: list[dict]) -> str:
-    """Format transcript segments into readable conversation text."""
-    lines = []
-    for seg in segments:
-        speaker = seg.get("speaker", "Unknown")
-        text = seg.get("text", "").strip()
-        start = seg.get("start", 0)
-        minutes = int(start // 60)
-        seconds = int(start % 60)
-        lines.append(f"[{minutes:02d}:{seconds:02d}] {speaker}: {text}")
-    return "\n".join(lines)
 
 
 def _parse_analysis_response(response_text: str) -> dict[str, Any] | None:

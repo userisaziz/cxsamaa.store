@@ -20,15 +20,17 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[dict] = None):
     """Store transcript segments and word-level transcripts in the database using sync session."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session, sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Clear any existing segments for this recording
         session.query(TranscriptSegment).filter(
             TranscriptSegment.recording_id == uuid.UUID(recording_id)
@@ -64,8 +66,7 @@ def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[
                 session.add(word_transcript)
 
         session.commit()
-        logger.info(f"[{recording_id}] Stored {len(segments)} transcript segments, {len(words or [])} words")
-    engine.dispose()
+        logger.info("[%s] Stored %d transcript segments, %d words", recording_id, len(segments), len(words or []))
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="transcribe_audio")
@@ -78,7 +79,7 @@ def transcribe_audio_task(self, recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info(f"[{recording_id}] Starting transcription")
+    logger.info("[%s] Starting transcription", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
 
     try:
@@ -90,7 +91,7 @@ def transcribe_audio_task(self, recording_id: str) -> str:
 
         # Download preprocessed audio
         preprocessed_key = f"preprocessed/{recording_id}/audio.wav"
-        logger.info(f"[{recording_id}] Downloading preprocessed audio")
+        logger.info("[%s] Downloading preprocessed audio", recording_id)
         audio_data = _download_audio_sync(storage, preprocessed_key)
 
         # For large files, chunk the audio (use 15-minute chunks with 30-second overlap)
@@ -112,79 +113,21 @@ def transcribe_audio_task(self, recording_id: str) -> str:
             )
 
         if not segments:
-            logger.warning(f"[{recording_id}] No transcript segments produced")
+            logger.warning("[%s] No transcript segments produced", recording_id)
             segments = []
 
         # Store transcript in database
         _store_transcript_sync(recording_id, segments, words)
 
-        logger.info(f"[{recording_id}] Transcription complete: {len(segments)} segments")
+        logger.info("[%s] Transcription complete: %d segments", recording_id, len(segments))
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Transcription failed: {exc}")
-        if self.request.retries >= self.max_retries:
-
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
-
-
-def _transcribe_in_chunks(
-    audio_data: bytes, recording_id: str, max_chunk_size: int
-) -> tuple[list[dict], list[dict]]:
-    """Split large audio into chunks and transcribe each.
-    
-    Returns:
-        Tuple of (segments, words)
-    """
-    logger.info(f"[{recording_id}] Audio too large ({len(audio_data)} bytes), chunking")
-
-    audio = AudioSegment.from_wav(io.BytesIO(audio_data))
-    duration_ms = len(audio)
-
-    # Calculate chunk size in ms based on byte ratio
-    chunk_duration_ms = int(duration_ms * (max_chunk_size / len(audio_data)))
-    chunk_duration_ms = int(chunk_duration_ms * 0.9)  # safety margin
-
-    all_segments = []
-    all_words = []
-    offset_ms = 0
-
-    while offset_ms < duration_ms:
-        end_ms = min(offset_ms + chunk_duration_ms, duration_ms)
-        chunk = audio[offset_ms:end_ms]
-
-        chunk_buffer = io.BytesIO()
-        chunk.export(chunk_buffer, format="wav")
-        chunk_bytes = chunk_buffer.getvalue()
-
-        logger.info(
-            f"[{recording_id}] Transcribing chunk {offset_ms/1000:.0f}s-{end_ms/1000:.0f}s"
-        )
-        result = transcribe_audio(chunk_bytes)
-        chunk_segments = result.get("segments", [])
-        chunk_words = result.get("words", [])
-
-        # Adjust timestamps by offset and clamp to chunk boundaries
-        offset_seconds = offset_ms / 1000.0
-        chunk_end_seconds = end_ms / 1000.0
-        for seg in chunk_segments:
-            seg["start"] = max(seg["start"] + offset_seconds, offset_seconds)
-            seg["end"] = min(seg["end"] + offset_seconds, chunk_end_seconds)
-            if seg["start"] < seg["end"]:  # skip degenerate segments
-                all_segments.append(seg)
-
-        # Adjust word timestamps
-        for word in chunk_words:
-            word["start"] = max(word["start"] + offset_seconds, offset_seconds)
-            word["end"] = min(word["end"] + offset_seconds, chunk_end_seconds)
-            if word["start"] < word["end"]:
-                all_words.append(word)
-
-        offset_ms = end_ms
-
-    logger.info(f"[{recording_id}] Chunked transcription: {len(all_segments)} segments, {len(all_words)} words")
-    return all_segments, all_words
+        logger.error("[%s] Transcription failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise
 
 
 def _transcribe_in_chunks_with_overlap(
@@ -208,8 +151,10 @@ def _transcribe_in_chunks_with_overlap(
         Tuple of (segments, words) with deduplicated results
     """
     logger.info(
-        f"[{recording_id}] Audio requires chunking: "
-        f"{chunk_duration_ms/1000:.0f}s chunks with {overlap_ms/1000:.0f}s overlap"
+        "[%s] Audio requires chunking: %ds chunks with %ds overlap",
+        recording_id,
+        chunk_duration_ms // 1000,
+        overlap_ms // 1000,
     )
 
     audio = AudioSegment.from_wav(io.BytesIO(audio_data))
@@ -229,8 +174,11 @@ def _transcribe_in_chunks_with_overlap(
         chunk_bytes = chunk_buffer.getvalue()
 
         logger.info(
-            f"[{recording_id}] Transcribing chunk {chunk_index + 1}: "
-            f"{chunk_start_ms/1000:.0f}s-{chunk_end_ms/1000:.0f}s"
+            "[%s] Transcribing chunk %d: %.0fs-%.0fs",
+            recording_id,
+            chunk_index + 1,
+            chunk_start_ms / 1000,
+            chunk_end_ms / 1000,
         )
 
         result = transcribe_audio(chunk_bytes)
@@ -255,12 +203,15 @@ def _transcribe_in_chunks_with_overlap(
 
         chunk_index += 1
 
-    # Deduplicate words in overlap regions
+    # Deduplicate words and segments in overlap regions
     all_words = _deduplicate_words(all_words)
+    all_segments = _deduplicate_segments(all_segments)
 
     logger.info(
-        f"[{recording_id}] Chunked transcription complete: "
-        f"{len(all_segments)} segments, {len(all_words)} words (after dedup)"
+        "[%s] Chunked transcription complete: %d segments, %d words (after dedup)",
+        recording_id,
+        len(all_segments),
+        len(all_words),
     )
     return all_segments, all_words
 
@@ -301,3 +252,20 @@ def _deduplicate_words(words: list[dict], tolerance_ms: float = 50.0) -> list[di
             deduplicated.append(word)
 
     return deduplicated
+
+
+def _deduplicate_segments(segments: list[dict], tolerance_s: float = 1.0) -> list[dict]:
+    """Remove duplicate segments produced by overlap regions."""
+    if not segments:
+        return []
+    sorted_segs = sorted(segments, key=lambda s: s["start"])
+    result = [sorted_segs[0]]
+    for seg in sorted_segs[1:]:
+        last = result[-1]
+        if (
+            abs(seg["start"] - last["start"]) < tolerance_s
+            and seg["text"].strip() == last["text"].strip()
+        ):
+            continue
+        result.append(seg)
+    return result

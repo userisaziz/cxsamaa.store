@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
+from src.ai.utils import format_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def score_salesperson_performance(
     if not conversation_segments:
         return None
 
-    transcript_text = _format_transcript(conversation_segments)
+    transcript_text = format_transcript(conversation_segments)
 
     messages = [
         {"role": "system", "content": SCORING_SYSTEM_PROMPT},
@@ -119,19 +120,6 @@ def score_salesperson_performance(
             return None
 
     return None
-
-
-def _format_transcript(segments: list[dict]) -> str:
-    """Format transcript segments into readable text."""
-    lines = []
-    for seg in segments:
-        speaker = seg.get("speaker", "Unknown")
-        text = seg.get("text", "").strip()
-        start = seg.get("start", 0)
-        minutes = int(start // 60)
-        seconds = int(start % 60)
-        lines.append(f"[{minutes:02d}:{seconds:02d}] {speaker}: {text}")
-    return "\n".join(lines)
 
 
 def _parse_scores_response(response_text: str) -> dict[str, int | None] | None:

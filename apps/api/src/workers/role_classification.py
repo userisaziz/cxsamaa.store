@@ -14,22 +14,24 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _get_conversation_turns_sync(recording_id: str) -> list[dict]:
     """Load conversation turns from DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         rows = (
             session.query(ConversationTurn)
             .filter(ConversationTurn.recording_id == uuid.UUID(recording_id))
             .order_by(ConversationTurn.start_time)
             .all()
         )
-        turns = [
+        return [
             {
                 "speaker": row.speaker_label,
                 "start_time": row.start_time,
@@ -39,18 +41,11 @@ def _get_conversation_turns_sync(recording_id: str) -> list[dict]:
             }
             for row in rows
         ]
-    engine.dispose()
-    return turns
 
 
 def _store_role_classifications_sync(recording_id: str, classifications: dict):
     """Store role classification results in DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Clear any existing classifications for this recording
         session.query(SpeakerRole).filter(
             SpeakerRole.recording_id == uuid.UUID(recording_id)
@@ -74,8 +69,7 @@ def _store_role_classifications_sync(recording_id: str, classifications: dict):
             ).update({"role_label": role_info["role"]})
 
         session.commit()
-        logger.info(f"[{recording_id}] Stored {len(classifications)} role classifications")
-    engine.dispose()
+        logger.info("[%s] Stored %d role classifications", recording_id, len(classifications))
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="classify_speaker_roles")
@@ -88,8 +82,8 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info(f"[{recording_id}] Starting speaker role classification")
-    _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
+    logger.info("[%s] Starting speaker role classification", recording_id)
+    _update_recording_status_sync(recording_id, RecordingStatus.PROCESSING)
 
     try:
         recording = _get_recording_sync(recording_id)
@@ -99,36 +93,42 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
         # Load conversation turns
         conversation_turns = _get_conversation_turns_sync(recording_id)
         if not conversation_turns:
-            logger.warning(f"[{recording_id}] No conversation turns found — cannot classify roles")
+            logger.warning("[%s] No conversation turns found — cannot classify roles", recording_id)
             _update_recording_status_sync(recording_id, RecordingStatus.FAILED, "No conversation turns")
             return recording_id
 
-        logger.info(f"[{recording_id}] Classifying roles from {len(conversation_turns)} turns")
+        logger.info("[%s] Classifying roles from %d turns", recording_id, len(conversation_turns))
 
         # Classify speaker roles
         classifications = classify_speaker_roles(conversation_turns, use_llm=True)
 
         if not classifications:
-            logger.warning(f"[{recording_id}] No role classifications produced")
-            classifications = {}
+            logger.warning("[%s] No role classifications produced — leaving existing roles", recording_id)
 
-        # Store classifications in DB
-        _store_role_classifications_sync(recording_id, classifications)
+        else:
+            _store_role_classifications_sync(recording_id, classifications)
 
         # Log results
         for speaker, role_info in classifications.items():
             logger.info(
-                f"[{recording_id}] {speaker} → {role_info['role']} "
-                f"(method={role_info['method']}, confidence={role_info['confidence']:.2f})"
+                "[%s] %s → %s (method=%s, confidence=%.2f)",
+                recording_id,
+                speaker,
+                role_info["role"],
+                role_info["method"],
+                role_info["confidence"],
             )
 
         logger.info(
-            f"[{recording_id}] Role classification complete: {len(classifications)} speakers classified"
+            "[%s] Role classification complete: %d speakers classified",
+            recording_id,
+            len(classifications),
         )
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Role classification failed: {exc}")
-        if self.request.retries >= self.max_retries:
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Role classification failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

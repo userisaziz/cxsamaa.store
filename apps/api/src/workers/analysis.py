@@ -16,22 +16,24 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _get_conversations_sync(recording_id: str) -> list[dict]:
     """Load conversations from DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         rows = (
             session.query(Conversation)
             .filter(Conversation.recording_id == uuid.UUID(recording_id))
             .order_by(Conversation.start_time)
             .all()
         )
-        conversations = [
+        return [
             {
                 "id": str(row.id),
                 "start_time": row.start_time,
@@ -39,24 +41,16 @@ def _get_conversations_sync(recording_id: str) -> list[dict]:
             }
             for row in rows
         ]
-    engine.dispose()
-    return conversations
 
 
 def _get_conversation_segments_sync(conversation_id: str) -> list[dict]:
     """Load transcript segments for a conversation's time range."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
     # First get the conversation's recording_id and time range
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         conv = session.query(Conversation).filter(
             Conversation.id == uuid.UUID(conversation_id)
         ).first()
         if not conv:
-            engine.dispose()
             return []
 
         recording_id = conv.recording_id
@@ -74,7 +68,7 @@ def _get_conversation_segments_sync(conversation_id: str) -> list[dict]:
             .order_by(TranscriptSegment.start_time)
             .all()
         )
-        segments = [
+        return [
             {
                 "start": row.start_time,
                 "end": row.end_time,
@@ -83,18 +77,11 @@ def _get_conversation_segments_sync(conversation_id: str) -> list[dict]:
             }
             for row in rows
         ]
-    engine.dispose()
-    return segments
 
 
 def _store_analysis_sync(conversation_id: str, analysis: dict):
     """Store analysis result in the database."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Check if analysis already exists
         existing = session.query(ConversationAnalysis).filter(
             ConversationAnalysis.conversation_id == uuid.UUID(conversation_id)
@@ -134,23 +121,16 @@ def _store_analysis_sync(conversation_id: str, analysis: dict):
             session.add(ca)
 
         session.commit()
-        logger.info(f"[{conversation_id}] Stored conversation analysis")
-    engine.dispose()
+        logger.info("[%s] Stored conversation analysis", conversation_id)
 
 
 def _update_conversation_summary_sync(conversation_id: str, summary: str):
     """Update the conversation's summary field."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         session.query(Conversation).filter(
             Conversation.id == uuid.UUID(conversation_id)
         ).update({"summary": summary})
         session.commit()
-    engine.dispose()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="analyze_conversations")
@@ -166,7 +146,7 @@ def analyze_conversations(self, recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info(f"[{recording_id}] Starting conversation analysis")
+    logger.info("[%s] Starting conversation analysis", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.ANALYZING)
 
     try:
@@ -177,10 +157,10 @@ def analyze_conversations(self, recording_id: str) -> str:
         # Load all conversations
         conversations = _get_conversations_sync(recording_id)
         if not conversations:
-            logger.warning(f"[{recording_id}] No conversations found — skipping analysis")
+            logger.warning("[%s] No conversations found — skipping analysis", recording_id)
             return recording_id
 
-        logger.info(f"[{recording_id}] Analyzing {len(conversations)} conversations")
+        logger.info("[%s] Analyzing %d conversations", recording_id, len(conversations))
 
         analyzed_count = 0
         failed_count = 0
@@ -188,29 +168,34 @@ def analyze_conversations(self, recording_id: str) -> str:
         for conv in conversations:
             conv_id = conv["id"]
             logger.info(
-                f"[{recording_id}] Analyzing conversation {conv_id} "
-                f"({conv['start_time']:.1f}s - {conv['end_time']:.1f}s)"
+                "[%s] Analyzing conversation %s (%.1fs - %.1fs)",
+                recording_id,
+                conv_id,
+                conv["start_time"],
+                conv["end_time"],
             )
 
             # Get transcript segments for this conversation
             segments = _get_conversation_segments_sync(conv_id)
             if not segments:
-                logger.warning(f"[{recording_id}] No segments for conversation {conv_id}")
+                logger.warning("[%s] No segments for conversation %s", recording_id, conv_id)
                 failed_count += 1
                 continue
 
             # Analyze conversation
             analysis = analyze_conversation_ai(segments)
             if analysis is None:
-                logger.warning(f"[{recording_id}] Analysis failed for conversation {conv_id}")
+                logger.warning("[%s] Analysis failed for conversation %s", recording_id, conv_id)
                 failed_count += 1
                 continue
 
             # Check confidence threshold before storing
             if analysis.get("confidence", 0) < MIN_CONFIDENCE_THRESHOLD:
                 logger.warning(
-                    f"[{recording_id}] Analysis confidence {analysis.get('confidence')}% "
-                    f"below threshold {MIN_CONFIDENCE_THRESHOLD}% — skipping"
+                    "[%s] Analysis confidence %d%% below threshold %d%% — skipping",
+                    recording_id,
+                    analysis.get("confidence"),
+                    MIN_CONFIDENCE_THRESHOLD,
                 )
                 failed_count += 1
                 continue
@@ -225,21 +210,27 @@ def analyze_conversations(self, recording_id: str) -> str:
 
             analyzed_count += 1
             logger.info(
-                f"[{recording_id}] Conversation {conv_id}: "
-                f"outcome={analysis.get('outcome')}, "
-                f"confidence={analysis.get('confidence')}"
+                "[%s] Conversation %s: outcome=%s, confidence=%d",
+                recording_id,
+                conv_id,
+                analysis.get("outcome"),
+                analysis.get("confidence"),
             )
 
         logger.info(
-            f"[{recording_id}] Analysis complete: "
-            f"{analyzed_count} analyzed, {failed_count} failed out of {len(conversations)}"
+            "[%s] Analysis complete: %d analyzed, %d failed out of %d",
+            recording_id,
+            analyzed_count,
+            failed_count,
+            len(conversations),
         )
 
+        _update_recording_status_sync(recording_id, RecordingStatus.ANALYZED)
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Analysis failed: {exc}")
-        if self.request.retries >= self.max_retries:
-
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Analysis failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

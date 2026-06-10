@@ -14,22 +14,24 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _get_word_transcripts_sync(recording_id: str) -> list[dict]:
     """Load word-level transcripts from DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         rows = (
             session.query(WordTranscript)
             .filter(WordTranscript.recording_id == uuid.UUID(recording_id))
             .order_by(WordTranscript.start_time)
             .all()
         )
-        words = [
+        return [
             {
                 "word": row.word,
                 "start_time": row.start_time,
@@ -39,18 +41,11 @@ def _get_word_transcripts_sync(recording_id: str) -> list[dict]:
             }
             for row in rows
         ]
-    engine.dispose()
-    return words
 
 
 def _store_turns_sync(recording_id: str, turns: list[dict]):
     """Store conversation turn records in DB."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Clear any existing turns for this recording
         session.query(ConversationTurn).filter(
             ConversationTurn.recording_id == uuid.UUID(recording_id)
@@ -68,8 +63,7 @@ def _store_turns_sync(recording_id: str, turns: list[dict]):
             session.add(conversation_turn)
 
         session.commit()
-        logger.info(f"[{recording_id}] Stored {len(turns)} conversation turns")
-    engine.dispose()
+        logger.info("[%s] Stored %d conversation turns", recording_id, len(turns))
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="build_conversation_turns")
@@ -83,8 +77,8 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info(f"[{recording_id}] Starting conversation turn building")
-    _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
+    logger.info("[%s] Starting conversation turn building", recording_id)
+    _update_recording_status_sync(recording_id, RecordingStatus.PROCESSING)
 
     try:
         recording = _get_recording_sync(recording_id)
@@ -94,29 +88,32 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
         # Load word-level transcripts
         word_transcripts = _get_word_transcripts_sync(recording_id)
         if not word_transcripts:
-            logger.warning(f"[{recording_id}] No word transcripts found — cannot build turns")
+            logger.warning("[%s] No word transcripts found — cannot build turns", recording_id)
             _update_recording_status_sync(recording_id, RecordingStatus.FAILED, "No word transcripts")
             return recording_id
 
-        logger.info(f"[{recording_id}] Building turns from {len(word_transcripts)} words")
+        logger.info("[%s] Building turns from %d words", recording_id, len(word_transcripts))
 
         # Build conversation turns
         turns = build_conversation_turns(word_transcripts)
 
         if not turns:
-            logger.warning(f"[{recording_id}] No turns built")
+            logger.warning("[%s] No turns built", recording_id)
             turns = []
 
         # Store turns in DB
         _store_turns_sync(recording_id, turns)
 
         logger.info(
-            f"[{recording_id}] Turn building complete: {len(turns)} turns built"
+            "[%s] Turn building complete: %d turns built",
+            recording_id,
+            len(turns),
         )
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Turn building failed: {exc}")
-        if self.request.retries >= self.max_retries:
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Turn building failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

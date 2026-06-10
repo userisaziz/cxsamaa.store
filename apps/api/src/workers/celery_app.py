@@ -1,5 +1,5 @@
 from celery import Celery
-from sqlalchemy.orm import registry
+from sqlalchemy.orm import configure_mappers
 
 from src.config import settings
 
@@ -7,8 +7,7 @@ from src.config import settings
 from src.models import brand, conversation, recording, salesperson, store, transcript, user, metrics
 
 # Configure relationships between all mapped models
-mapper_registry = registry()
-mapper_registry.configure()
+configure_mappers()
 
 celery_app = Celery(
     "samaa",
@@ -18,6 +17,8 @@ celery_app = Celery(
         "src.workers.preprocessing",
         "src.workers.transcription",
         "src.workers.diarization",
+        "src.workers.turn_builder",
+        "src.workers.role_classification",
         "src.workers.segmentation",
         "src.workers.analysis",
         "src.workers.scoring",

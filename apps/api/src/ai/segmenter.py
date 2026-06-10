@@ -188,7 +188,7 @@ def _find_boundaries(
                 f"  Boundary at segment {i}: medium gap {gap:.1f}s + farewell"
             )
 
-        # Rule 6: Silence gap from preprocessing overlaps this position
+        # Rule 4: Silence gap from preprocessing overlaps this position
         for gap_start, gap_end in silence_gaps:
             if current["end"] >= gap_start and next_seg["start"] <= gap_end:
                 gap_duration = gap_end - gap_start
@@ -319,34 +319,3 @@ def _text_matches_patterns(text: str, patterns: list[str]) -> bool:
 
     # Fallback for any custom pattern list
     return any(re.search(p, text_lower, re.IGNORECASE) for p in patterns)
-
-
-def _is_customer_speaker(
-    speaker: str,
-    segments: list[dict],
-    from_index: int,
-) -> bool:
-    """Heuristic: determine if a speaker is likely the customer (not salesperson).
-
-    In retail, the salesperson typically speaks first and more often in short bursts.
-    The customer tends to speak in shorter total segments but asks questions.
-    For simplicity, we check if this speaker is NOT the most frequent speaker
-    in the first few segments (salesperson usually initiates).
-    """
-    if not speaker:
-        return False
-
-    # Look at first 10 segments to identify the salesperson (most frequent speaker)
-    sample = segments[: min(10, len(segments))]
-    speaker_counts: dict[str, int] = {}
-    for seg in sample:
-        sp = seg.get("speaker", "")
-        if sp:
-            speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
-
-    if not speaker_counts:
-        return False
-
-    # The most frequent speaker in opening segments is likely the salesperson
-    salesperson = max(speaker_counts, key=speaker_counts.get)  # type: ignore[arg-type]
-    return speaker != salesperson

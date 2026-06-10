@@ -104,7 +104,6 @@ def diarize_audio(self, recording_id: str) -> str:
                 "[%s] No transcript segments found — skipping speaker assignment",
                 recording_id,
             )
-            _update_recording_status_sync(recording_id, RecordingStatus.DIARIZED)
             return recording_id
 
         labeled_segments = assign_speaker_labels(transcript_segments, speaker_segments)
@@ -113,8 +112,6 @@ def diarize_audio(self, recording_id: str) -> str:
         speaker_counts = Counter(seg["speaker"] for seg in labeled_segments)
         logger.info("[%s] Speaker distribution: %s", recording_id, dict(speaker_counts))
 
-        # FIX 1: mark as DIARIZED so downstream stages can proceed.
-        _update_recording_status_sync(recording_id, RecordingStatus.DIARIZED)
         return recording_id
 
     except Exception as exc:

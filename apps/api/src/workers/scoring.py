@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from src.ai.scorer import compute_average_scores, score_salesperson_performance
+from src.ai.scorer import score_salesperson_performance
 from src.config import settings
 from src.models.conversation import Conversation, ConversationAnalysis
 from src.models.metrics import DailyMetrics
@@ -17,15 +17,17 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level engine — reused across task invocations in the same worker process.
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+_SessionLocal = sessionmaker(bind=_engine)
+
 
 def _get_conversations_with_segments_sync(recording_id: str) -> list[dict]:
     """Load conversations with their transcript segments."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         conversations = (
             session.query(Conversation)
             .filter(Conversation.recording_id == uuid.UUID(recording_id))
@@ -57,18 +59,12 @@ def _get_conversations_with_segments_sync(recording_id: str) -> list[dict]:
                     for seg in segments
                 ],
             })
-    engine.dispose()
     return result
 
 
 def _store_scores_sync(conversation_id: str, scores: dict):
     """Store scoring results in conversation_analysis.scores."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         analysis = session.query(ConversationAnalysis).filter(
             ConversationAnalysis.conversation_id == uuid.UUID(conversation_id)
         ).first()
@@ -84,17 +80,11 @@ def _store_scores_sync(conversation_id: str, scores: dict):
             session.add(ca)
 
         session.commit()
-    engine.dispose()
 
 
 def _complete_recording_sync(recording_id: str):
     """Mark recording as COMPLETED with processed_at timestamp."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         recording = session.query(Recording).filter(
             Recording.id == uuid.UUID(recording_id)
         ).first()
@@ -103,23 +93,16 @@ def _complete_recording_sync(recording_id: str):
             recording.processed_at = datetime.now(timezone.utc)
             recording.error_message = None
         session.commit()
-    engine.dispose()
 
 
 def _update_daily_metrics_sync(recording_id: str):
     """Update daily metrics for the salesperson and store after scoring."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    engine = create_engine(settings.database_url_sync)
-    SessionLocal = sessionmaker(bind=engine)
-    with SessionLocal() as session:
+    with _SessionLocal() as session:
         # Get recording info
         recording = session.query(Recording).filter(
             Recording.id == uuid.UUID(recording_id)
         ).first()
         if not recording:
-            engine.dispose()
             return
 
         salesperson_id = recording.salesperson_id
@@ -131,7 +114,6 @@ def _update_daily_metrics_sync(recording_id: str):
             Salesperson.id == salesperson_id
         ).first()
         if not salesperson:
-            engine.dispose()
             return
 
         store_id = salesperson.store_id
@@ -141,8 +123,7 @@ def _update_daily_metrics_sync(recording_id: str):
         _upsert_daily_metrics(session, store_id, "STORE", today)
 
         session.commit()
-        logger.info(f"[{recording_id}] Updated daily metrics")
-    engine.dispose()
+    logger.info("[%s] Updated daily metrics", recording_id)
 
 
 def _upsert_daily_metrics(session, entity_id, entity_type: str, date_val):
@@ -244,7 +225,7 @@ def score_salesperson(self, recording_id: str) -> str:
     Returns:
         recording_id (final stage in pipeline)
     """
-    logger.info(f"[{recording_id}] Starting salesperson scoring")
+    logger.info("[%s] Starting salesperson scoring", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.SCORING)
 
     try:
@@ -255,11 +236,11 @@ def score_salesperson(self, recording_id: str) -> str:
         # Load conversations with segments
         conversations = _get_conversations_with_segments_sync(recording_id)
         if not conversations:
-            logger.warning(f"[{recording_id}] No conversations to score")
+            logger.warning("[%s] No conversations to score", recording_id)
             _complete_recording_sync(recording_id)
             return recording_id
 
-        logger.info(f"[{recording_id}] Scoring {len(conversations)} conversations")
+        logger.info("[%s] Scoring %d conversations", recording_id, len(conversations))
 
         all_scores = []
         scored_count = 0
@@ -273,7 +254,7 @@ def score_salesperson(self, recording_id: str) -> str:
 
             scores = score_salesperson_performance(segments)
             if scores is None:
-                logger.warning(f"[{recording_id}] Scoring failed for conversation {conv_id}")
+                logger.warning("[%s] Scoring failed for conversation %s", recording_id, conv_id)
                 continue
 
             _store_scores_sync(conv_id, scores)
@@ -281,18 +262,15 @@ def score_salesperson(self, recording_id: str) -> str:
             scored_count += 1
 
             logger.info(
-                f"[{recording_id}] Conversation {conv_id} scores: "
-                f"greeting={scores.get('greeting_score')}, "
-                f"discovery={scores.get('discovery_score')}, "
-                f"product={scores.get('product_knowledge_score')}, "
-                f"objection={scores.get('objection_handling_score')}, "
-                f"closing={scores.get('closing_score')}"
+                "[%s] Conversation %s scores: greeting=%s, discovery=%s, product=%s, objection=%s, closing=%s",
+                recording_id,
+                conv_id,
+                scores.get("greeting_score"),
+                scores.get("discovery_score"),
+                scores.get("product_knowledge_score"),
+                scores.get("objection_handling_score"),
+                scores.get("closing_score"),
             )
-
-        # Compute averages
-        if all_scores:
-            averages = compute_average_scores(all_scores)
-            logger.info(f"[{recording_id}] Average scores: {averages}")
 
         # Mark recording as completed
         _complete_recording_sync(recording_id)
@@ -301,13 +279,16 @@ def score_salesperson(self, recording_id: str) -> str:
         _update_daily_metrics_sync(recording_id)
 
         logger.info(
-            f"[{recording_id}] Scoring complete: {scored_count}/{len(conversations)} scored"
+            "[%s] Scoring complete: %d/%d scored",
+            recording_id,
+            scored_count,
+            len(conversations),
         )
         return recording_id
 
     except Exception as exc:
-        logger.error(f"[{recording_id}] Scoring failed: {exc}")
-        if self.request.retries >= self.max_retries:
-
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        raise self.retry(exc=exc)
+        logger.error("[%s] Scoring failed: %s", recording_id, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        raise

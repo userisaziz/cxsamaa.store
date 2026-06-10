@@ -265,7 +265,6 @@ def _classify_with_heuristic(
             "first_turn": False,
             "first_greeting": False,
             "turn_count": 0,
-            "total_duration": 0.0,
             "price_mentions": 0,
             "product_mentions": 0,
         }
@@ -274,7 +273,6 @@ def _classify_with_heuristic(
     for i, turn in enumerate(conversation_turns):
         speaker = turn["speaker"]
         signals[speaker]["turn_count"] += 1
-        signals[speaker]["total_duration"] += turn["end_time"] - turn["start_time"]
 
         # First turn speaker
         if i == 0:
