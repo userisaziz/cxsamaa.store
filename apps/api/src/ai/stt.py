@@ -100,13 +100,20 @@ class RivaSTTClient:
             except OSError:
                 pass
 
-    def _parse_riva_response(self, response) -> list[dict[str, Any]]:
-        """Parse Riva gRPC response into standardized segment format.
+    def _parse_riva_response(self, response) -> dict[str, Any]:
+        """Parse Riva gRPC response into standardized segment and word format.
 
         Riva returns results with alternatives and word-level timestamps.
-        We need to segment based on silence gaps or use word timestamps.
+        We extract both segment-level and word-level data for speaker attribution.
+
+        Returns:
+            {
+                "segments": [{start, end, text}],
+                "words": [{word, start, end, confidence}]
+            }
         """
         segments = []
+        all_words = []
 
         for result in response.results:
             if not result.alternatives:
@@ -123,30 +130,43 @@ class RivaSTTClient:
                 # Group words into segments based on pause gaps
                 words = alternative.words
                 segment_words = []
-                segment_start = words[0].start_time
+                # Riva returns timestamps in centiseconds (0.01s units), convert to seconds
+                segment_start = words[0].start_time / 10000.0
 
                 for i, word in enumerate(words):
                     segment_words.append(word.word)
 
+                    # Extract word-level data with confidence
+                    word_start = word.start_time / 10000.0
+                    word_end = word.end_time / 10000.0
+                    word_confidence = getattr(word, 'confidence', 0.85)  # Default 0.85 if not available
+
+                    all_words.append({
+                        "word": word.word,
+                        "start": round(word_start, 3),
+                        "end": round(word_end, 3),
+                        "confidence": round(word_confidence, 3),
+                    })
+
                     # Check if next word has a large time gap (>1s pause = new segment)
                     if i < len(words) - 1:
-                        gap = words[i + 1].start_time - word.end_time
+                        gap = (words[i + 1].start_time - word.end_time) / 10000.0
                         if gap > 1.0:  # 1 second pause
                             segment_text = " ".join(segment_words)
                             segments.append({
                                 "start": segment_start,
-                                "end": word.end_time,
+                                "end": word.end_time / 10000.0,
                                 "text": segment_text,
                             })
                             segment_words = []
-                            segment_start = words[i + 1].start_time
+                            segment_start = words[i + 1].start_time / 10000.0
 
                 # Add remaining words as final segment
                 if segment_words:
                     segment_text = " ".join(segment_words)
                     segments.append({
                         "start": segment_start,
-                        "end": words[-1].end_time,
+                        "end": words[-1].end_time / 10000.0,
                         "text": segment_text,
                     })
             else:
@@ -170,17 +190,21 @@ class RivaSTTClient:
         segments = [s for s in segments if s["text"].strip()]
 
         logger.info(
-            f"STT produced {len(segments)} segments, "
+            f"STT produced {len(segments)} segments, {len(all_words)} words, "
             f"total duration: {segments[-1]['end']:.1f}s" if segments else "STT produced 0 segments"
         )
-        return segments
+
+        return {
+            "segments": segments,
+            "words": all_words,
+        }
 
 
 # Singleton instance
 riva_stt_client = RivaSTTClient()
 
 
-def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[str, Any]]:
+def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> dict[str, Any]:
     """Transcribe audio using NVIDIA Riva gRPC STT.
 
     Args:
@@ -188,6 +212,10 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[di
         filename: Filename for logging purposes (unused in gRPC)
 
     Returns:
-        List of transcript segments with start/end timestamps
+        Dict with segments and words:
+        {
+            "segments": [{start, end, text}],
+            "words": [{word, start, end, confidence}]
+        }
     """
     return riva_stt_client.transcribe_audio(audio_bytes)

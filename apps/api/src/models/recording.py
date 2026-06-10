@@ -46,6 +46,7 @@ class Recording(Base):
         DateTime(timezone=True), nullable=True
     )
     silence_gaps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    speech_regions: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # VAD-detected speech-active regions
 
     # Relationships
     salesperson: Mapped["Salesperson"] = relationship(
@@ -53,6 +54,15 @@ class Recording(Base):
     )
     transcript_segments: Mapped[list["TranscriptSegment"]] = relationship(
         "TranscriptSegment", back_populates="recording", cascade="all, delete-orphan"
+    )
+    word_transcripts: Mapped[list["WordTranscript"]] = relationship(
+        "WordTranscript", back_populates="recording", cascade="all, delete-orphan"
+    )
+    conversation_turns: Mapped[list["ConversationTurn"]] = relationship(
+        "ConversationTurn", back_populates="recording", cascade="all, delete-orphan"
+    )
+    speaker_roles: Mapped[list["SpeakerRole"]] = relationship(
+        "SpeakerRole", back_populates="recording", cascade="all, delete-orphan"
     )
     conversations: Mapped[list["Conversation"]] = relationship(
         "Conversation", back_populates="recording", cascade="all, delete-orphan"

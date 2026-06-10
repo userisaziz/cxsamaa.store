@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-SILENCE_GAP_THRESHOLD = 30.0  # seconds — gap > 30s = conversation boundary
-MEDIUM_GAP_THRESHOLD = 10.0  # seconds — gap > 10s + question = likely new conversation
+SILENCE_GAP_THRESHOLD = 60.0  # seconds — gap > 60s = conversation boundary
+MEDIUM_GAP_THRESHOLD = 20.0  # seconds — gap > 20s + farewell = likely end of conversation
 MIN_CONVERSATION_DURATION = 10.0  # seconds — ignore segments shorter than 10s
 MIN_SEGMENTS_PER_CONVERSATION = 2  # minimum transcript segments in a conversation
 
@@ -150,11 +150,9 @@ def _find_boundaries(
     """Find indices where conversation boundaries occur.
 
     A boundary exists between segment[i] and segment[i+1] when:
-    1. There's a silence gap > 30s between them
-    2. segment[i+1] starts with a greeting phrase (any language)
-    3. segment[i] ends with a farewell phrase (any language)
-    4. Medium gap (10-30s) + next segment is a direct question (no-greeting start)
-    5. Speaker change after medium gap (new customer walk-in)
+    1. There's a silence gap > 60s between them (customer left, long pause)
+    2. segment[i] ends with farewell AND segment[i+1] starts with greeting (clear customer change)
+    3. Medium gap (20-60s) + farewell = customer left after browsing
     """
     boundaries = []
 
@@ -165,42 +163,29 @@ def _find_boundaries(
         gap = next_seg["start"] - current["end"]
         is_boundary = False
 
-        # Rule 1: Large silence gap — always a boundary
+        # Rule 1: Large silence gap (> 60s) — always a boundary
         if gap >= SILENCE_GAP_THRESHOLD:
             is_boundary = True
-            logger.debug(f"  Boundary at segment {i}: silence gap {gap:.1f}s")
+            logger.debug(f"  Boundary at segment {i}: long silence gap {gap:.1f}s")
 
-        # Rule 2: Next segment starts with a greeting (EN/AR/HI)
-        if _text_matches_patterns(next_seg.get("text", ""), GREETING_PATTERNS):
+        # Rule 2: Farewell + Greeting combo — clear customer transition
+        # Only create boundary if CURRENT ends with farewell AND NEXT starts with greeting
+        if (
+            _text_matches_patterns(current.get("text", ""), FAREWELL_PATTERNS) and
+            _text_matches_patterns(next_seg.get("text", ""), GREETING_PATTERNS)
+        ):
             is_boundary = True
-            logger.debug(f"  Boundary at segment {i}: greeting detected")
+            logger.debug(f"  Boundary at segment {i}: farewell + greeting combo")
 
-        # Rule 3: Current segment ends with a farewell (EN/AR/HI)
-        if _text_matches_patterns(current.get("text", ""), FAREWELL_PATTERNS):
-            is_boundary = True
-            logger.debug(f"  Boundary at segment {i}: farewell detected")
-
-        # Rule 4: Medium gap + direct question — customer starts asking without greeting
+        # Rule 3: Medium gap (20-60s) + farewell — customer left after browsing/thinking
         if (
             not is_boundary
             and gap >= MEDIUM_GAP_THRESHOLD
-            and _text_matches_patterns(next_seg.get("text", ""), DIRECT_QUESTION_PATTERNS)
+            and _text_matches_patterns(current.get("text", ""), FAREWELL_PATTERNS)
         ):
             is_boundary = True
             logger.debug(
-                f"  Boundary at segment {i}: medium gap {gap:.1f}s + direct question"
-            )
-
-        # Rule 5: Speaker change after medium gap — new customer walk-in
-        if (
-            not is_boundary
-            and gap >= MEDIUM_GAP_THRESHOLD
-            and current.get("speaker") != next_seg.get("speaker")
-            and _is_customer_speaker(next_seg.get("speaker", ""), segments, i + 1)
-        ):
-            is_boundary = True
-            logger.debug(
-                f"  Boundary at segment {i}: speaker change after {gap:.1f}s gap"
+                f"  Boundary at segment {i}: medium gap {gap:.1f}s + farewell"
             )
 
         # Rule 6: Silence gap from preprocessing overlaps this position

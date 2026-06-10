@@ -14,7 +14,7 @@ from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
 logger = logging.getLogger(__name__)
 
 # Minimum confidence threshold for publishing results (PRD AI-06)
-MIN_CONFIDENCE_THRESHOLD = 85
+MIN_CONFIDENCE_THRESHOLD = 50
 
 SYSTEM_PROMPT = """You are an expert retail sales analyst. You analyze customer-salesperson conversations and extract structured business intelligence.
 

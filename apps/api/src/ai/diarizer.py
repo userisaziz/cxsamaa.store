@@ -1,16 +1,52 @@
-"""NVIDIA NeMo Speaker Diarization wrapper via NIM API."""
+"""Speaker Diarization — pyannote.audio (primary) + NVIDIA NIM (fallback)."""
 import io
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
+from src.ai.pyannote_diarizer import PyannoteDiarizer
 from src.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Lazy-loaded pyannote diarizer (initialized on first use)
+_pyannote_diarizer: Optional[PyannoteDiarizer] = None
+
+
+def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
+    """Get or initialize pyannote diarizer (lazy loading)."""
+    global _pyannote_diarizer
+    
+    if _pyannote_diarizer is not None:
+        return _pyannote_diarizer
+    
+    # Check if pyannote is enabled and available
+    if not settings.diarization_use_pyannote:
+        logger.info("Pyannote diarization disabled via config")
+        return None
+    
+    try:
+        _pyannote_diarizer = PyannoteDiarizer(
+            model_name=settings.pyannote_model_name,
+            device=settings.pyannote_device if settings.pyannote_device else None,
+        )
+        logger.info("Pyannote diarizer initialized successfully")
+        return _pyannote_diarizer
+    except Exception as e:
+        logger.warning(f"Failed to initialize pyannote diarizer: {e}. Falling back to NVIDIA.")
+        return None
+
 
 def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[str, Any]]:
-    """Diarize speakers in audio using NVIDIA NeMo.
+    """Diarize speakers using pyannote.audio (primary) or NVIDIA NeMo (fallback).
+
+    Pyannote.audio provides superior accuracy for multilingual retail sales audio:
+    - Better handling of overlapping speech
+    - Improved robustness with background noise
+    - Optimized for Hindi/English/Arabic code-switching scenarios
+    - Handles accent diversity across Middle East and South Asia
+    
+    Falls back to NVIDIA NIM if pyannote is disabled or fails.
 
     Args:
         audio_bytes: Raw audio data (16kHz mono WAV)
@@ -24,8 +60,23 @@ def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[
             ...
         ]
     """
-    logger.info(f"Sending audio to NeMo diarization ({len(audio_bytes)} bytes)")
-
+    # Try pyannote.audio first (if enabled)
+    if settings.diarization_use_pyannote:
+        try:
+            diarizer = _get_pyannote_diarizer()
+            if diarizer:
+                logger.info(f"Using pyannote diarization ({len(audio_bytes)} bytes)")
+                segments = diarizer.diarize(audio_bytes)
+                if segments:
+                    logger.info(f"Pyannote diarization successful: {len(segments)} segments")
+                    return segments
+                logger.warning("Pyannote returned no segments, falling back to NVIDIA")
+        except Exception as e:
+            logger.warning(f"Pyannote diarization failed: {e}. Falling back to NVIDIA.")
+    
+    # Fallback to NVIDIA NeMo
+    logger.info(f"Using NVIDIA NeMo diarization ({len(audio_bytes)} bytes)")
+    
     files = {
         "file": (filename, io.BytesIO(audio_bytes), "audio/wav"),
     }

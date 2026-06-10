@@ -64,7 +64,15 @@ def _update_speaker_labels_sync(recording_id: str, labeled_segments: list[dict])
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="diarize_audio")
 def diarize_audio(self, recording_id: str) -> str:
-    """Diarize speakers using NVIDIA NeMo and assign labels to transcript segments.
+    """Diarize speakers using pyannote.audio (primary) or NVIDIA NeMo (fallback) and assign labels.
+
+    Pyannote.audio provides superior accuracy for multilingual retail sales audio:
+    - Better handling of overlapping speech
+    - Improved robustness with background noise  
+    - Optimized for Hindi/English/Arabic code-switching scenarios
+    - Handles accent diversity across Middle East and South Asia
+
+    Falls back to NVIDIA NIM if pyannote is disabled or fails.
 
     Returns:
         recording_id for the next pipeline stage
@@ -84,8 +92,8 @@ def diarize_audio(self, recording_id: str) -> str:
         logger.info(f"[{recording_id}] Downloading preprocessed audio for diarization")
         audio_data = _download_audio_sync(storage, preprocessed_key)
 
-        # Call diarization API
-        logger.info(f"[{recording_id}] Calling NeMo diarization API")
+        # Call diarization (pyannote primary, NVIDIA fallback)
+        logger.info(f"[{recording_id}] Running diarization (pyannote.audio primary)")
         speaker_segments = diarize_audio_api(audio_data)
         logger.info(f"[{recording_id}] Diarization produced {len(speaker_segments)} speaker segments")
 

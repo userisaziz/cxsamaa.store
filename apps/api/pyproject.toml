@@ -21,6 +21,9 @@ dependencies = [
     "pgvector>=0.3.0",
     "pydub>=0.25.1",
     "numpy>=2.0.0",
+    "pyannote.audio>=3.3.0",
+    "torch>=2.4.0",
+    "torchaudio>=2.4.0",
 ]
 
 [project.optional-dependencies]
@@ -41,3 +44,26 @@ select = ["E", "F", "I", "N", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing --cov-report=html:htmlcov"
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "tests/*",
+    "**/__pycache__/*",
+    "**/alembic/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+fail_under = 30  # Minimum coverage threshold (will increase over time)

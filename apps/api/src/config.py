@@ -34,6 +34,27 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
+    # Pyannote.audio (Local Diarization)
+    diarization_use_pyannote: bool = True  # Enable pyannote as primary diarizer
+    pyannote_hf_token: str = ""  # HuggingFace token for gated pyannote models
+    pyannote_model_name: str = "pyannote/speaker-diarization-3.1"
+    pyannote_device: str = ""  # 'cpu', 'cuda', 'mps' (empty = auto-detect)
+
+    # Silero VAD (Voice Activity Detection)
+    vad_use_silero: bool = True  # Enable Silero VAD for speech region detection
+    vad_threshold: float = 0.5  # Speech probability threshold (0.0-1.0)
+    vad_min_speech_duration_ms: int = 250  # Minimum speech segment duration
+    vad_min_silence_duration_ms: int = 500  # Minimum silence to mark boundary
+
+    # Audio Chunking for Long Recordings
+    audio_chunk_duration_minutes: int = 15  # Process long audio in 15-min chunks
+    audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
+
+    # Sortformer Diarization (Future - NVIDIA)
+    diarization_use_sortformer: bool = False  # Enable when NVIDIA provides endpoint
+    sortformer_endpoint: str = ""
+    sortformer_model: str = "nvidia/sortformer-diarization-1.0"
+
     # App
     app_env: str = "development"
     app_debug: bool = True
