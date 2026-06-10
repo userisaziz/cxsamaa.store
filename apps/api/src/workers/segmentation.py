@@ -137,7 +137,6 @@ def segment_conversations(self, recording_id: str) -> str:
             len(conversations),
         )
 
-        _update_recording_status_sync(recording_id, RecordingStatus.SEGMENTED)
         return recording_id
 
     except Exception as exc:

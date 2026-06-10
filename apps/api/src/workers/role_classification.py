@@ -83,7 +83,6 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
         recording_id for the next pipeline stage
     """
     logger.info("[%s] Starting speaker role classification", recording_id)
-    _update_recording_status_sync(recording_id, RecordingStatus.PROCESSING)
 
     try:
         recording = _get_recording_sync(recording_id)

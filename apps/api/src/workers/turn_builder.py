@@ -78,7 +78,6 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
         recording_id for the next pipeline stage
     """
     logger.info("[%s] Starting conversation turn building", recording_id)
-    _update_recording_status_sync(recording_id, RecordingStatus.PROCESSING)
 
     try:
         recording = _get_recording_sync(recording_id)

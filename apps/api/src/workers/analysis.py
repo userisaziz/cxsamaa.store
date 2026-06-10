@@ -225,7 +225,6 @@ def analyze_conversations(self, recording_id: str) -> str:
             len(conversations),
         )
 
-        _update_recording_status_sync(recording_id, RecordingStatus.ANALYZED)
         return recording_id
 
     except Exception as exc:
