@@ -95,37 +95,37 @@ class NVIDIAClient:
             headers.update(extra_headers)
 
         last_error = None
-        for attempt in range(self._max_retries):
-            try:
-                logger.debug(f"NIM API POST {endpoint} (attempt {attempt + 1}/{self._max_retries})")
-                with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout) as client:
+            for attempt in range(self._max_retries):
+                try:
+                    logger.debug(f"NIM API POST {endpoint} (attempt {attempt + 1}/{self._max_retries})")
                     response = client.post(url, json=json_data, headers=headers)
 
-                if response.status_code == 200:
-                    return response.json()
+                    if response.status_code == 200:
+                        return response.json()
 
-                if self._should_retry(response.status_code) and attempt < self._max_retries - 1:
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    logger.warning(
-                        f"NIM API {endpoint} returned {response.status_code}, "
-                        f"retrying in {delay}s (attempt {attempt + 1})"
-                    )
-                    time.sleep(delay)
-                    continue
+                    if self._should_retry(response.status_code) and attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"NIM API {endpoint} returned {response.status_code}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
 
-                self._handle_error_response(response)
+                    self._handle_error_response(response)
 
-            except (httpx.ConnectError, httpx.TimeoutException) as exc:
-                last_error = exc
-                if attempt < self._max_retries - 1:
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    logger.warning(
-                        f"NIM API {endpoint} connection error: {exc}, "
-                        f"retrying in {delay}s (attempt {attempt + 1})"
-                    )
-                    time.sleep(delay)
-                    continue
-                raise NVIDIAAPIError(f"Connection failed after {self._max_retries} attempts: {exc}")
+                except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                    last_error = exc
+                    if attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"NIM API {endpoint} connection error: {exc}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
+                    raise NVIDIAAPIError(f"Connection failed after {self._max_retries} attempts: {exc}")
 
         raise NVIDIAAPIError(f"Failed after {self._max_retries} retries: {last_error}")
 
@@ -156,43 +156,43 @@ class NVIDIAClient:
             headers.update(extra_headers)
 
         last_error = None
-        for attempt in range(self._max_retries):
-            try:
-                # Seek file streams back to start on retry
-                if attempt > 0:
-                    for key, file_tuple in files.items():
-                        if hasattr(file_tuple[1], 'seek'):
-                            file_tuple[1].seek(0)
+        with httpx.Client(timeout=self.timeout) as client:
+            for attempt in range(self._max_retries):
+                try:
+                    # Seek file streams back to start on retry
+                    if attempt > 0:
+                        for key, file_tuple in files.items():
+                            if hasattr(file_tuple[1], 'seek'):
+                                file_tuple[1].seek(0)
 
-                logger.debug(f"NIM API POST {endpoint} (multipart, attempt {attempt + 1})")
-                with httpx.Client(timeout=self.timeout) as client:
+                    logger.debug(f"NIM API POST {endpoint} (multipart, attempt {attempt + 1})")
                     response = client.post(url, files=files, data=data or {}, headers=headers)
 
-                if response.status_code == 200:
-                    return response.json()
+                    if response.status_code == 200:
+                        return response.json()
 
-                if self._should_retry(response.status_code) and attempt < self._max_retries - 1:
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    logger.warning(
-                        f"NIM API {endpoint} returned {response.status_code}, "
-                        f"retrying in {delay}s (attempt {attempt + 1})"
-                    )
-                    time.sleep(delay)
-                    continue
+                    if self._should_retry(response.status_code) and attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"NIM API {endpoint} returned {response.status_code}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
 
-                self._handle_error_response(response)
+                    self._handle_error_response(response)
 
-            except (httpx.ConnectError, httpx.TimeoutException) as exc:
-                last_error = exc
-                if attempt < self._max_retries - 1:
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    logger.warning(
-                        f"NIM API {endpoint} connection error: {exc}, "
-                        f"retrying in {delay}s (attempt {attempt + 1})"
-                    )
-                    time.sleep(delay)
-                    continue
-                raise NVIDIAAPIError(f"Connection failed after {self._max_retries} attempts: {exc}")
+                except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                    last_error = exc
+                    if attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"NIM API {endpoint} connection error: {exc}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
+                    raise NVIDIAAPIError(f"Connection failed after {self._max_retries} attempts: {exc}")
 
         raise NVIDIAAPIError(f"Failed after {self._max_retries} retries: {last_error}")
 

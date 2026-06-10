@@ -130,15 +130,15 @@ class RivaSTTClient:
                 # Group words into segments based on pause gaps
                 words = alternative.words
                 segment_words = []
-                # Riva returns timestamps in centiseconds (0.01s units), convert to seconds
-                segment_start = words[0].start_time / 10000.0
+                # Riva returns google.protobuf.Duration — read seconds + nanos directly
+                segment_start = words[0].start_time.seconds + words[0].start_time.nanos / 1e9
 
                 for i, word in enumerate(words):
                     segment_words.append(word.word)
 
                     # Extract word-level data with confidence
-                    word_start = word.start_time / 10000.0
-                    word_end = word.end_time / 10000.0
+                    word_start = word.start_time.seconds + word.start_time.nanos / 1e9
+                    word_end = word.end_time.seconds + word.end_time.nanos / 1e9
                     word_confidence = getattr(word, 'confidence', 0.85)  # Default 0.85 if not available
 
                     all_words.append({
@@ -150,23 +150,25 @@ class RivaSTTClient:
 
                     # Check if next word has a large time gap (>1s pause = new segment)
                     if i < len(words) - 1:
-                        gap = (words[i + 1].start_time - word.end_time) / 10000.0
+                        next_start = words[i + 1].start_time.seconds + words[i + 1].start_time.nanos / 1e9
+                        gap = next_start - word_end
                         if gap > 1.0:  # 1 second pause
                             segment_text = " ".join(segment_words)
                             segments.append({
                                 "start": segment_start,
-                                "end": word.end_time / 10000.0,
+                                "end": word_end,
                                 "text": segment_text,
                             })
                             segment_words = []
-                            segment_start = words[i + 1].start_time / 10000.0
+                            segment_start = next_start
 
                 # Add remaining words as final segment
                 if segment_words:
                     segment_text = " ".join(segment_words)
+                    last_end = words[-1].end_time.seconds + words[-1].end_time.nanos / 1e9
                     segments.append({
                         "start": segment_start,
-                        "end": words[-1].end_time / 10000.0,
+                        "end": last_end,
                         "text": segment_text,
                     })
             else:

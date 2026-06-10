@@ -163,9 +163,13 @@ class PyannoteDiarizer:
         """Merge segments shorter than min_duration into adjacent segments.
         
         Short segments are often false positives or speaker identification errors.
+        Works on shallow copies to avoid mutating the input list.
         """
         if not segments:
             return []
+        
+        # Work on shallow copies to avoid mutating caller's data
+        segments = [dict(s) for s in segments]
         
         merged = []
         i = 0

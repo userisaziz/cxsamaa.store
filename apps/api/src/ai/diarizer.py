@@ -1,6 +1,7 @@
 """Speaker Diarization — pyannote.audio (primary) + NVIDIA NIM (fallback)."""
 import io
 import logging
+import threading
 from typing import Any, Optional
 
 from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
@@ -11,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 # Lazy-loaded pyannote diarizer (initialized on first use)
 _pyannote_diarizer: Optional[PyannoteDiarizer] = None
+_pyannote_lock = threading.Lock()  # Thread-safe initialization
 
 
 def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
-    """Get or initialize pyannote diarizer (lazy loading)."""
+    """Get or initialize pyannote diarizer (lazy loading, thread-safe)."""
     global _pyannote_diarizer
     
     if _pyannote_diarizer is not None:
@@ -25,16 +27,20 @@ def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
         logger.info("Pyannote diarization disabled via config")
         return None
     
-    try:
-        _pyannote_diarizer = PyannoteDiarizer(
-            model_name=settings.pyannote_model_name,
-            device=settings.pyannote_device if settings.pyannote_device else None,
-        )
-        logger.info("Pyannote diarizer initialized successfully")
-        return _pyannote_diarizer
-    except Exception as e:
-        logger.warning(f"Failed to initialize pyannote diarizer: {e}. Falling back to NVIDIA.")
-        return None
+    # Double-checked locking for thread safety
+    with _pyannote_lock:
+        if _pyannote_diarizer is None:
+            try:
+                _pyannote_diarizer = PyannoteDiarizer(
+                    model_name=settings.pyannote_model_name,
+                    device=settings.pyannote_device if settings.pyannote_device else None,
+                )
+                logger.info("Pyannote diarizer initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize pyannote diarizer: {e}. Falling back to NVIDIA.")
+                return None
+    
+    return _pyannote_diarizer
 
 
 def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[str, Any]]:

@@ -255,7 +255,9 @@ def _merge_farewell_greeting_boundaries(
             next_text = segments[b + 1].get("text", "")
             if _text_matches_patterns(current_text, FAREWELL_PATTERNS) and \
                _text_matches_patterns(next_text, GREETING_PATTERNS):
-                # Skip this boundary; keep the next one (greeting)
+                # Keep the farewell boundary (b); drop the greeting boundary (b+1)
+                # The greeting will open the new conversation naturally
+                merged.append(b)
                 skip_next = True
                 continue
 

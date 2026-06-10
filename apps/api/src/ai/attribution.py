@@ -112,6 +112,14 @@ def _normalize_speaker_labels(words: list[dict[str, Any]]) -> list[dict[str, Any
     for word in words:
         original_speaker = word.get("speaker", "UNKNOWN")
 
+        # Preserve UNKNOWN label — don't map it to a named speaker
+        if original_speaker == "UNKNOWN":
+            result.append({
+                **word,
+                "speaker": "UNKNOWN",
+            })
+            continue
+
         if original_speaker not in speaker_mapping:
             speaker_mapping[original_speaker] = f"Speaker_{chr(65 + speaker_counter)}"
             speaker_counter += 1
