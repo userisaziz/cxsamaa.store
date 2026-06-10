@@ -38,8 +38,6 @@ SAMAA is a full-stack platform for uploading, transcribing, diarizing, analyzing
 ### Operations
 
 ![Operations Page](screenshots/ops-view/ops-page.png)
-
-
 ---
 
 ## Workflow Video
@@ -53,6 +51,8 @@ Watch the complete SAMAA workflow demonstration:
 
 ## Architecture
 
+### System Overview
+
 ```
 xsamaa-ai-pipeline/
 ├── apps/
@@ -64,11 +64,97 @@ xsamaa-ai-pipeline/
 └── turbo.json           ← Turborepo config
 ```
 
-### Processing Pipeline
+### Backend Architecture
 
-Audio uploads flow through a Celery-based pipeline:
+The system follows a layered architecture with clear separation of concerns:
 
-**Preprocessing → Transcription (STT) → Diarization → Segmentation → Analysis (LLM) → Scoring**
+```mermaid
+graph TB
+subgraph "Presentation"
+V1["API v1 Router<br/>prefix=/api/v1"]
+AuthR["Auth Router"]
+BrandsR["Brands Router"]
+RecordingsR["Recordings Router"]
+ConversationsR["Conversations Router"]
+end
+subgraph "Business Logic"
+AuthSvc["Auth Service"]
+BrandSvc["Brand Service"]
+RecordingSvc["Recording Service"]
+end
+subgraph "Data Access"
+DB["Async Sessions"]
+ORM["SQLAlchemy ORM Models"]
+end
+subgraph "Infrastructure"
+Celery["Celery App"]
+Pipeline["Processing Pipeline"]
+Storage["Local Storage"]
+end
+V1 --> AuthR
+V1 --> BrandsR
+V1 --> RecordingsR
+V1 --> ConversationsR
+AuthR --> AuthSvc
+BrandsR --> BrandSvc
+RecordingsR --> RecordingSvc
+AuthSvc --> DB
+BrandSvc --> DB
+RecordingSvc --> DB
+DB --> ORM
+Pipeline --> Celery
+Pipeline --> Storage
+```
+
+### AI Processing Pipeline
+
+Audio uploads flow through a sequential Celery-based pipeline:
+
+```mermaid
+sequenceDiagram
+participant Client as "Client"
+participant API as "Recordings Endpoint"
+participant Pipe as "Pipeline Orchestrator"
+participant Pre as "Preprocessing"
+participant Trn as "Transcription"
+participant Seg as "Segmentation"
+participant Dir as "Diarization"
+participant Ana as "Analysis"
+participant Scr as "Scoring"
+Client->>API : "POST /v1/recordings/{id}/process"
+API->>Pipe : "Start pipeline chain"
+Pipe->>Pre : "Schedule preprocessing"
+Pre-->>Pipe : "Preprocessed media info"
+Pipe->>Trn : "Schedule transcription"
+Trn-->>Pipe : "Transcript segments"
+Pipe->>Seg : "Schedule segmentation"
+Seg-->>Pipe : "Segmented turns"
+Pipe->>Dir : "Schedule diarization"
+Dir-->>Pipe : "Speaker-labeled turns"
+Pipe->>Ana : "Schedule analysis"
+Ana-->>Pipe : "Insights payload"
+Pipe->>Scr : "Schedule scoring"
+Scr-->>Pipe : "Final metrics"
+Pipe-->>API : "Pipeline completed"
+API-->>Client : "202 Accepted"
+```
+
+### Pipeline Data Flow
+
+```mermaid
+graph LR
+PRE["Preprocessing"] --> TRN["Transcription"]
+TRN --> SEG["Segmentation"]
+SEG --> DIR["Diarization"]
+DIR --> ANA["Analysis"]
+ANA --> SCR["Scoring"]
+PRE --> REC["Recording Model"]
+TRN --> TRNS["Transcript Model"]
+SEG --> CONV["Conversation Model"]
+DIR --> CONV
+ANA --> CONV
+SCR --> MET["Metrics Model"]
+```
 
 ---
 
