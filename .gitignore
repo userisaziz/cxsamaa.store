@@ -48,3 +48,6 @@ apps/api/alembic/versions/*.pyc
 # Logs
 *.log
 .logs/
+
+# Ngrok (contains auth tokens)
+ngrok.yml
