@@ -16,16 +16,70 @@ logger = logging.getLogger(__name__)
 # Confidence threshold for LLM classification
 LLM_CONFIDENCE_THRESHOLD = 0.7
 
-# Heuristic patterns for role identification
+# Maximum speakers expected in a typical retail conversation (2-party)
+MAX_RETAIL_SPEAKERS = 3
+
+# --- Multilingual Greeting & Service Patterns ---
+# These patterns identify SALESPEAKER behavior: greetings, service offers,
+# product knowledge, and price/feature mentions across Arabic/Hindi/Urdu/English.
+
 GREETING_PATTERNS = [
+    # English greetings
     r"\b(welcome|hello|hi|good\s*(morning|afternoon|evening))\b",
-    r"\b(how\s*can\s*i\s*help|what\s*can\s*i\s*do|how\s*may\s*i\s*assist)\b",
     r"\b(come\s*in|step\s*right\s*in|take\s*a\s*look)\b",
+    # Arabic greetings (Gulf + MSA)
+    r"(هلا|هلا\s*والله|مرحبا|أهلا|اهلا|السلام\s*عليكم|حياك|حياك\s*الله|تفضل|تفضلي)",
+    r"(كيف\s*أقدر\s*أساعدك|كيف\s*اقدر\s*اساعدك|شلون\s*أخدمك|وش\s*تبي|وش\s*تبغى)",
+    # Hindi greetings
+    r"(नमस्ते|नमस्कार|आइए|पधारिए|स्वागत\s*है)",
+    r"(बताइए|क्या\s*हाल\s*है|कैसे\s*हैं\s*आप|जी\s*आइए)",
+    # Urdu greetings
+    r"(السلام\s*عليكم|آداب|خوش\s*آمدید|جی\s*آئیں|فرمائیے|بتائیے)",
+    # Transliterated common retail greetings
+    r"\b(hala|yalla|tفضل|khali|namaste|aao|ji\s*aao)\b",
+]
+
+SERVICE_PHRASE_PATTERNS = [
+    # English service phrases
+    r"\b(how\s*can\s*i\s*help|what\s*can\s*i\s*do|how\s*may\s*i\s*assist)\b",
+    r"\b(let\s*me\s*show|let\s*me\s*explain|i(?:'ll|\s*will)\s*help\s*you)\b",
+    # Arabic service phrases
+    r"(أقدر\s*أساعدك|أساعدك|أوريك|أشرح\s*لك|أوصي\s*لك|خلني\s*أوريك)",
+    r"(عندنا|لدينا|متوفر|متاح|هذي|هذا\s*الموديل|هذا\s*النوع)",
+    # Hindi service phrases
+    r"(मैं\s*आपकी|आपको\s*मदद|दिखाता\s*हूँ|समझाता\s*हूँ|बताता\s*हूँ)",
+    r"(हमारे\s*पास|यह\s*वाला|इसमें|इसका|ये\s*लीजिए)",
+    # English product/availability
+    r"\b(we\s*have|we\s*carry|our\s*products|available|in\s*stock)\b",
+    r"\b(this\s*model|this\s*one|let\s*me\s*show|recommend)\b",
 ]
 
 PRICE_MENTION_PATTERNS = [
     r"\b(price|cost|\$\d+|discount|offer|sale|deal)\b",
     r"\b(how\s*much|what.*price|bikam|كم\s*السعر)\b",
+    # Arabic price phrases
+    r"(سعره|بكم|ريال|درهم|دينار|تخفيض|خصم)",
+    # Hindi price phrases
+    r"(कीमत|कितने\s*का|रुपये|डिस्काउंट|ऑफर)",
+]
+
+# --- Customer Signal Patterns ---
+# These patterns identify CUSTOMER behavior: objections, questions,
+# purchase intent, and comparison language.
+
+CUSTOMER_SIGNAL_PATTERNS = [
+    # English objections / hesitation
+    r"\b(too\s*expensive|that'?s\s*(a\s*lot|pricey)|i\s*(don'?t|cant|can'?t)\s*think|i\s*need\s*to\s*think)\b",
+    r"\b(maybe\s*later|not\s*sure|let\s*me\s*think|i'?ll\s*come\s*back)\b",
+    # English purchase intent
+    r"\b(i(?:'ll|\s*will)\s*take|i\s*want|i(?:'d|\s*would)\s*like|can\s*i\s*get|give\s*me)\b",
+    r"\b(do\s*you\s*have|is\s*this\s*available|how\s*much\s*(is|does))\b",
+    # Arabic customer phrases
+    r"(غالي|ما\s*عندي|بفكر|خلني\s*أفكر|بعدين|إن\s*شاء\s*الله|مو\s*متأكد)",
+    r"(أبيه|أبي\s*هذا|أشتريه|وش\s*عندكم|تبيعون|عندكم|هل\s*فيه)",
+    # Hindi customer phrases
+    r"(महंगा|बहुत|सोचना\s*है|बाद\s*में|शायद|मुझे\s*चाहिए|ले\s*लूंगा|देना)",
+    r"(कितने\s*का|है\s*क्या|मिलेगा|दिखाओ|दिखाइए)",
 ]
 
 PRODUCT_MENTION_PATTERNS = [
@@ -35,8 +89,10 @@ PRODUCT_MENTION_PATTERNS = [
 
 # Pre-compiled patterns
 _COMPILED_GREETINGS = [re.compile(p, re.IGNORECASE) for p in GREETING_PATTERNS]
+_COMPILED_SERVICE = [re.compile(p, re.IGNORECASE) for p in SERVICE_PHRASE_PATTERNS]
 _COMPILED_PRICES = [re.compile(p, re.IGNORECASE) for p in PRICE_MENTION_PATTERNS]
 _COMPILED_PRODUCTS = [re.compile(p, re.IGNORECASE) for p in PRODUCT_MENTION_PATTERNS]
+_COMPILED_CUSTOMER = [re.compile(p, re.IGNORECASE) for p in CUSTOMER_SIGNAL_PATTERNS]
 
 
 def classify_speaker_roles(
@@ -110,46 +166,60 @@ def _classify_with_llm(
     Returns:
         Classification result dict or None if classification fails
     """
-    # Format conversation for prompt
+    # Format conversation for prompt with speaker tokens and turn numbers
     conversation_text = _format_conversation_for_llm(conversation_turns)
 
     # Unique speakers
     unique_speakers = list(set(turn["speaker"] for turn in conversation_turns))
+    speaker_count = len(unique_speakers)
 
-    prompt = f"""You are an expert retail sales conversation analyst. Analyze this conversation and classify each speaker as either 'Salesperson' or 'Customer'.
+    # Speaker count warning
+    speaker_count_note = ""
+    if speaker_count > MAX_RETAIL_SPEAKERS:
+        speaker_count_note = (
+            f"\n\nNOTE: {speaker_count} speakers detected in what appears to be a "
+            f"2-party retail conversation. This may indicate diarization errors. "
+            f"Classify the 2 most likely primary speakers and mark extras as 'Customer' "
+            f"with low confidence."
+        )
 
-Consider these signals:
-- Who initiates greetings (typically Salesperson)
-- Who asks vs answers product questions (Customer asks, Salesperson answers)
-- Who mentions prices, features, or product availability (typically Salesperson)
-- Speaking patterns (Salesperson usually speaks first and more frequently)
-- Who makes objections or expresses purchase intent (typically Customer)
+    prompt = f"""You are an expert retail sales conversation analyst specializing in multilingual Gulf retail environments (Arabic, Hindi, English, Urdu code-switching).
 
-Conversation:
+Analyze this conversation and classify each speaker as either 'Salesperson' or 'Customer'.
+
+KEY SIGNALS TO LOOK FOR:
+1. OPENING GREETING (strongest signal): The speaker who says the first greeting/service offer (e.g., "Welcome", "هلا", "नमस्ते", "how can I help") is almost certainly the Salesperson.
+2. SERVICE LANGUAGE: Phrases like "let me show you", "أوريك", "दिखाता हूँ", "we have", "عندنا" indicate Salesperson.
+3. PRODUCT KNOWLEDGE: Mentioning specific features, prices, availability, models = Salesperson.
+4. CUSTOMER SIGNALS: Objections ("too expensive", "غالي"), questions ("how much", "بكم"), hesitation ("let me think", "بفكر"), purchase intent ("I'll take it", "أبيه") = Customer.
+5. SPEAKING PATTERS: Salesperson typically initiates, asks open questions, and drives the conversation flow.
+
+Conversation (speaker labels are [Speaker_X] tokens, turn numbers shown):
 {conversation_text}
 
-Speakers to classify: {', '.join(unique_speakers)}
+Speakers to classify: {', '.join(unique_speakers)}{speaker_count_note}
 
 Respond with valid JSON matching this exact schema:
 {{
     "classifications": {{
         "Speaker_A": {{
-            "role": "Salesperson",  // or "Customer"
-            "confidence": 0.95,      // 0.0-1.0, your confidence in this classification
-            "reasoning": "Brief explanation of why"
+            "role": "Salesperson",
+            "confidence": 0.95,
+            "reasoning": "Brief explanation citing specific signals (e.g., 'opened with greeting in Arabic, mentioned prices')"
         }},
         "Speaker_B": {{
             "role": "Customer",
             "confidence": 0.92,
-            "reasoning": "Brief explanation"
+            "reasoning": "Brief explanation citing specific signals"
         }}
     }}
 }}
 
 Rules:
 - Each speaker must be classified as exactly "Salesperson" or "Customer"
-- Confidence should be between 0.0 and 1.0
-- Reasoning should be 1-2 sentences max
+- Confidence should be between 0.0 and 1.0 — be honest about uncertainty
+- If a speaker has very few turns, lower confidence accordingly
+- Reasoning should cite specific signals from the conversation
 - Respond ONLY with valid JSON, no additional text"""
 
     messages = [
@@ -233,10 +303,11 @@ def _classify_with_heuristic(
     """Rule-based heuristic classification (fallback when LLM unavailable).
 
     Uses these signals in priority order:
-    1. First speaker to greet = Salesperson
-    2. Speaker with most turns = Salesperson
-    3. Speaker mentioning prices/products = Salesperson
-    4. Speaking time ratio (Salesperson typically 60-70%)
+    1. First speaker to greet / offer service = Salesperson (strongest)
+    2. Service phrase mentions = Salesperson
+    3. Price/product mentions = Salesperson
+    4. Customer signal patterns = Customer (negative salesperson score)
+    5. Turn count ratio (Salesperson typically drives conversation)
 
     Args:
         conversation_turns: List of conversation turn dicts
@@ -258,15 +329,25 @@ def _classify_with_heuristic(
             }
         }
 
+    # Speaker count validation
+    if len(unique_speakers) > MAX_RETAIL_SPEAKERS:
+        logger.warning(
+            f"Detected {len(unique_speakers)} speakers in retail conversation "
+            f"(max expected: {MAX_RETAIL_SPEAKERS}). Possible diarization error."
+        )
+
     # Calculate heuristic signals
     signals = {}
     for speaker in unique_speakers:
         signals[speaker] = {
             "first_turn": False,
             "first_greeting": False,
+            "first_service": False,
             "turn_count": 0,
             "price_mentions": 0,
             "product_mentions": 0,
+            "service_mentions": 0,
+            "customer_signals": 0,
         }
 
     # Analyze turns
@@ -278,11 +359,20 @@ def _classify_with_heuristic(
         if i == 0:
             signals[speaker]["first_turn"] = True
 
-        # Check for greeting in first 3 turns
+        # Check for greeting in first 3 turns (strongest signal)
         if i < 3 and _text_matches_patterns(turn["text"], _COMPILED_GREETINGS):
             signals[speaker]["first_greeting"] = True
 
-        # Count price/product mentions
+        # Check for service phrases in first 5 turns
+        if i < 5 and _text_matches_patterns(turn["text"], _COMPILED_SERVICE):
+            signals[speaker]["first_service"] = True
+
+        # Count service phrase mentions (salesperson signal)
+        signals[speaker]["service_mentions"] += _count_pattern_matches(
+            turn["text"], _COMPILED_SERVICE
+        )
+
+        # Count price/product mentions (salesperson knowledge)
         signals[speaker]["price_mentions"] += _count_pattern_matches(
             turn["text"], _COMPILED_PRICES
         )
@@ -290,29 +380,46 @@ def _classify_with_heuristic(
             turn["text"], _COMPILED_PRODUCTS
         )
 
+        # Count customer signal patterns (objections, questions, hesitation)
+        signals[speaker]["customer_signals"] += _count_pattern_matches(
+            turn["text"], _COMPILED_CUSTOMER
+        )
+
     # Apply rules in priority order
     scores = {}
     for speaker in unique_speakers:
         score = 0.0
 
-        # Rule 1: First greeting (strongest signal)
+        # Rule 1: First greeting (STRONGEST signal — nearly definitive)
         if signals[speaker]["first_greeting"]:
-            score += 3.0
+            score += 5.0
 
-        # Rule 2: First turn (moderate signal)
+        # Rule 2: First service phrase (strong signal)
+        if signals[speaker]["first_service"]:
+            score += 3.5
+
+        # Rule 3: First turn (moderate signal)
         if signals[speaker]["first_turn"]:
             score += 1.5
 
-        # Rule 3: Turn count (salesperson typically drives conversation)
+        # Rule 4: Turn count (salesperson typically drives conversation)
         max_turns = max(s["turn_count"] for s in signals.values())
         if signals[speaker]["turn_count"] == max_turns and max_turns > 0:
             score += 1.0
 
-        # Rule 4: Price/product mentions (salesperson knowledge)
+        # Rule 5: Service phrase mentions (salesperson behavior)
+        if signals[speaker]["service_mentions"] > 0:
+            score += min(signals[speaker]["service_mentions"] * 1.5, 4.0)
+
+        # Rule 6: Price/product mentions (salesperson knowledge)
         if signals[speaker]["price_mentions"] > 0:
             score += 2.0
         if signals[speaker]["product_mentions"] > 0:
             score += 1.5
+
+        # Rule 7: Customer signals (NEGATIVE for salesperson = customer indicator)
+        if signals[speaker]["customer_signals"] > 0:
+            score -= min(signals[speaker]["customer_signals"] * 1.0, 3.0)
 
         scores[speaker] = score
 
@@ -323,7 +430,11 @@ def _classify_with_heuristic(
 
     # Calculate confidence based on score difference
     score_diff = abs(scores[salesperson] - scores[customer])
-    confidence = min(score_diff / 5.0, 1.0)  # Normalize to 0-1
+    # Normalize: larger denominator since max possible score is higher now
+    confidence = min(score_diff / 8.0, 1.0)
+    # Floor confidence at 0.1 if there's any differentiation
+    if score_diff > 0:
+        confidence = max(confidence, 0.1)
 
     result = {
         salesperson: {
@@ -346,23 +457,30 @@ def _classify_with_heuristic(
             "confidence": 0.3,  # Low confidence for extras
         }
 
-    logger.info(f"Heuristic classification: {salesperson}=Salesperson (score={scores[salesperson]:.1f}), {customer}=Customer (score={scores[customer]:.1f})")
+    logger.info(
+        f"Heuristic classification: {salesperson}=Salesperson "
+        f"(score={scores[salesperson]:.1f}), {customer}=Customer "
+        f"(score={scores[customer]:.1f}), diff={score_diff:.1f}"
+    )
 
     return result
 
 
 def _format_conversation_for_llm(turns: list[dict[str, Any]]) -> str:
-    """Format conversation turns for LLM prompt.
+    """Format conversation turns for LLM prompt with speaker tokens and turn numbers.
+
+    Uses [Speaker_X] token format (token-based approach from Zolensky et al.)
+    and includes turn numbering for temporal context.
 
     Args:
         turns: List of conversation turn dicts
 
     Returns:
-        Formatted conversation string
+        Formatted conversation string with turn numbers and speaker tokens
     """
     lines = []
-    for turn in turns:
-        lines.append(f"{turn['speaker']}: {turn['text']}")
+    for i, turn in enumerate(turns, 1):
+        lines.append(f"[{i}] [{turn['speaker']}]: {turn['text']}")
     return "\n".join(lines)
 
 
