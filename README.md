@@ -16,7 +16,6 @@ SAMAA is a full-stack platform for uploading, transcribing, diarizing, analyzing
 ![Interaction Details 1](screenshots/dashboard-view/interaction-details-1.png)
 
 
-![Coaching View](screenshots/dashboard-view/coaching.png)
 
 ### Features
 
@@ -26,12 +25,14 @@ SAMAA is a full-stack platform for uploading, transcribing, diarizing, analyzing
 ![Stores List](screenshots/dashboard-view/stores-list.png)
 
 
+![Coaching View](screenshots/dashboard-view/coaching.png)
+<!-- 
 ### Dashboard Views
 
 ![Brand Dashboard 1](screenshots/dashboard-view/brand-1.png)
 ![Brand Dashboard 2](screenshots/dashboard-view/brand-2.png)
 ![Brand Dashboard 3](screenshots/dashboard-view/brand-3.png)
-
+ -->
 
 
 
