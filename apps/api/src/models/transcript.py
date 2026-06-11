@@ -98,11 +98,11 @@ class SpeakerRole(Base):
 class SpeakerVoiceprint(Base):
     """Voiceprint enrollment profile for known speaker identification.
 
-    Stores voiceprint data linked to a salesperson. Used for pre-diarization
-    speaker matching — if audio matches an enrolled voiceprint, the speaker
-    is immediately identified as that salesperson.
+    Stores speaker embeddings linked to a salesperson. Used for
+    cross-conversation speaker matching — if audio matches an enrolled
+    voiceprint, the speaker is identified as that salesperson.
 
-    Supports multiple voiceprint engines (Picovoice Eagle, etc.).
+    Engines: pyannote/embedding (primary), resemblyzer (fallback). Both free.
     """
     __tablename__ = "speaker_voiceprints"
 
@@ -115,12 +115,12 @@ class SpeakerVoiceprint(Base):
         comment="Source recording used for enrollment"
     )
     engine: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="picovoice_eagle",
-        comment="Voiceprint engine: picovoice_eagle, resemblyzer, etc."
+        String(50), nullable=False, default="pyannote",
+        comment="Voiceprint engine: pyannote, resemblyzer"
     )
     voiceprint_bytes: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True,
-        comment="Serialized voiceprint profile data"
+        comment="Serialized speaker embedding vector (float32 bytes)"
     )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending",

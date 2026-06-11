@@ -1,251 +1,359 @@
-"""Voiceprint enrollment and matching service (Phase C scaffold).
+"""Voiceprint enrollment and speaker verification using open-source embeddings.
 
-Provides an abstraction layer for speaker identification via voiceprint
-enrollment. Supports pluggable engines (Picovoice Eagle, Resemblyzer, etc.).
+Supports two free engines (zero paid dependencies):
+- pyannote/embedding — speaker embeddings from the pyannote.audio project (already in project)
+- resemblyzer — open-source speaker encoder (pip install resemblyzer, fallback)
 
-Current status: SCAFFOLD ONLY — the Picovoice Eagle integration requires
-the `pveagle` package and an access key from the Picovoice Console.
-The service methods raise NotImplementedError until the SDK is installed
-and configured.
-
-Architecture:
-    1. Enrollment: A salesperson records 30-60s of speech → engine creates
-       a voiceprint profile → stored in speaker_voiceprints table.
-    2. Matching: Before diarization, audio is compared against enrolled
-       voiceprints → matched segments get labeled immediately → unmatched
-       voices become "Customer".
-    3. Hybrid resolution: voiceprint match + LLM role classification +
-       recording metadata → confidence-weighted fusion.
+Speaker embeddings are stored as vectors in the speaker_voiceprints table,
+enabling cross-conversation speaker tracking and automatic salesperson identification.
 """
+from __future__ import annotations
+
 import logging
-import uuid
-from dataclasses import dataclass
-from enum import Enum
+import threading
+import tempfile
+from pathlib import Path
 from typing import Protocol
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+import numpy as np
+import torch
+from sqlalchemy import select, update, func
+from sqlalchemy.exc import NoResultFound
 
+from src.config import settings
+from src.database import async_session_factory
 from src.models.transcript import SpeakerVoiceprint
 
 logger = logging.getLogger(__name__)
 
+# Minimum cosine similarity to consider two voiceprints as the same speaker
+SIMILARITY_THRESHOLD = 0.80
 
-class VoiceprintEngine(str, Enum):
-    """Supported voiceprint engines."""
-    PICOVOICE_EAGLE = "picovoice_eagle"
-    RESEMBLYZER = "resemblyzer"
+# Embedding dimensions per engine
+ENGINE_DIMENSIONS = {
+    "pyannote": 512,
+    "resemblyzer": 256,
+}
 
-
-class EnrollmentStatus(str, Enum):
-    """Voiceprint enrollment status."""
-    PENDING = "pending"
-    ENROLLED = "enrolled"
-    FAILED = "failed"
-
-
-@dataclass
-class VoiceprintMatch:
-    """Result of matching audio against enrolled voiceprints."""
-    salesperson_id: uuid.UUID
-    speaker_label: str
-    confidence: float
-    engine: str
+# Thread-safe engine initialization
+_pyannote_model = None
+_pyannote_lock = threading.Lock()
 
 
-class VoiceprintEngineProtocol(Protocol):
-    """Interface for pluggable voiceprint engines."""
+# ──────────────────────────────────────────────────────────────
+# Pyannote Embedding Engine (primary, free, already in project)
+# ──────────────────────────────────────────────────────────────
 
-    def enroll(self, audio_frames: list[bytes], sample_rate: int) -> bytes:
-        """Create a voiceprint profile from audio frames.
+def _get_pyannote_embedding_model():
+    """Lazy-load pyannote/embedding model (thread-safe).
 
-        Args:
-            audio_frames: List of PCM audio frames (16-bit, mono).
-            sample_rate: Audio sample rate in Hz.
+    This is the same embedding backbone used inside the pyannote 3.1
+    diarization pipeline, exposed directly for speaker verification.
+    """
+    global _pyannote_model
 
-        Returns:
-            Serialized voiceprint profile bytes.
-        """
-        ...
+    if _pyannote_model is not None:
+        return _pyannote_model
 
-    def match(
-        self, audio_frames: list[bytes], sample_rate: int, profiles: list[bytes]
-    ) -> list[tuple[int, float]]:
-        """Match audio against a list of voiceprint profiles.
+    with _pyannote_lock:
+        if _pyannote_model is None:
+            try:
+                from pyannote.audio import Model
 
-        Args:
-            audio_frames: List of PCM audio frames.
-            sample_rate: Audio sample rate in Hz.
-            profiles: List of serialized voiceprint profiles.
+                hf_token = settings.pyannote_hf_token or None
+                model = Model.from_pretrained(
+                    "pyannote/embedding",
+                    token=hf_token,
+                )
 
-        Returns:
-            List of (profile_index, confidence) tuples, sorted by confidence desc.
-        """
-        ...
+                # Move to device
+                if torch.cuda.is_available():
+                    device = torch.device("cuda")
+                elif torch.backends.mps.is_available():
+                    device = torch.device("mps")
+                else:
+                    device = torch.device("cpu")
+                model.to(device)
+                model.eval()
+
+                _pyannote_model = model
+                logger.info("Pyannote embedding model loaded on %s", device)
+            except Exception as e:
+                logger.error("Failed to load pyannote embedding model: %s", e)
+                return None
+
+    return _pyannote_model
 
 
-# --- Database Operations ---
+def extract_embedding_pyannote(audio_bytes: bytes, sample_rate: int = 16000) -> np.ndarray | None:
+    """Extract a speaker embedding vector from audio using pyannote.
+
+    Args:
+        audio_bytes: Raw 16kHz mono WAV audio bytes
+        sample_rate: Audio sample rate (default 16kHz)
+
+    Returns:
+        512-dim numpy embedding vector, or None on failure
+    """
+    model = _get_pyannote_embedding_model()
+    if model is None:
+        return None
+
+    try:
+        from pyannote.audio import Inference
+        from pyannote.audio.core.io import Audio
+        import torchaudio
+        import io
+
+        # Load audio from bytes
+        waveform, sr = torchaudio.load(io.BytesIO(audio_bytes))
+        if sr != 16000:
+            resampler = torchaudio.transforms.Resample(sr, 16000)
+            waveform = resampler(waveform)
+            sr = 16000
+
+        # Ensure mono
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+
+        # Extract embedding using pyannote Inference
+        inference = Inference(model, window="whole")
+        embedding = inference({"waveform": waveform, "sample_rate": sr})
+
+        # Convert to numpy and normalize
+        vec = embedding.cpu().numpy().flatten()
+        vec = vec / (np.linalg.norm(vec) + 1e-8)
+
+        logger.info("Extracted pyannote embedding: shape=%s", vec.shape)
+        return vec
+
+    except Exception as e:
+        logger.error("Pyannote embedding extraction failed: %s", e)
+        return None
+
+
+# ──────────────────────────────────────────────────────────────
+# Resemblyzer Engine (fallback, free, pip install resemblyzer)
+# ──────────────────────────────────────────────────────────────
+
+def extract_embedding_resemblyzer(audio_bytes: bytes, sample_rate: int = 16000) -> np.ndarray | None:
+    """Extract a speaker embedding using Resemblyzer (open source).
+
+    Args:
+        audio_bytes: Raw 16kHz mono WAV audio bytes
+        sample_rate: Audio sample rate
+
+    Returns:
+        256-dim numpy embedding vector, or None on failure
+    """
+    try:
+        from resemblyzer import VoiceEncoder, preprocess_wav
+        import io
+
+        # Load and preprocess audio
+        wav = preprocess_wav(io.BytesIO(audio_bytes))
+
+        # Encode
+        encoder = VoiceEncoder()
+        embedding = encoder.embed_utterance(wav)
+
+        # Normalize
+        vec = embedding / (np.linalg.norm(embedding) + 1e-8)
+
+        logger.info("Extracted resemblyzer embedding: shape=%s", vec.shape)
+        return vec
+
+    except ImportError:
+        logger.warning("Resemblyzer not installed. pip install resemblyzer")
+        return None
+    except Exception as e:
+        logger.error("Resemblyzer embedding extraction failed: %s", e)
+        return None
+
+
+# ──────────────────────────────────────────────────────────────
+# Unified Engine Interface
+# ──────────────────────────────────────────────────────────────
+
+def extract_embedding(
+    audio_bytes: bytes,
+    engine: str = "pyannote",
+    sample_rate: int = 16000,
+) -> np.ndarray | None:
+    """Extract a speaker embedding using the specified engine.
+
+    Tries the requested engine first, falls back to the other.
+
+    Args:
+        audio_bytes: Raw 16kHz mono WAV audio bytes
+        engine: "pyannote" (default) or "resemblyzer"
+        sample_rate: Audio sample rate
+
+    Returns:
+        Normalized embedding vector, or None if all engines fail
+    """
+    if engine == "pyannote":
+        vec = extract_embedding_pyannote(audio_bytes, sample_rate)
+        if vec is not None:
+            return vec
+        logger.info("Pyannote failed, falling back to resemblyzer")
+        return extract_embedding_resemblyzer(audio_bytes, sample_rate)
+    else:
+        vec = extract_embedding_resemblyzer(audio_bytes, sample_rate)
+        if vec is not None:
+            return vec
+        logger.info("Resemblyzer failed, falling back to pyannote")
+        return extract_embedding_pyannote(audio_bytes, sample_rate)
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute cosine similarity between two embedding vectors."""
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a < 1e-8 or norm_b < 1e-8:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
+
+
+# ──────────────────────────────────────────────────────────────
+# Voiceprint Protocol & DB Operations
+# ──────────────────────────────────────────────────────────────
+
+class VoiceprintEngine(Protocol):
+    """Protocol for voiceprint engine implementations."""
+
+    def enroll(self, audio_bytes: bytes) -> bytes: ...
+    def verify(self, audio_bytes: bytes, voiceprint_bytes: bytes) -> float: ...
+
 
 async def create_voiceprint_record(
-    db: AsyncSession,
     salesperson_id: str,
     recording_id: str | None = None,
-    engine: str = VoiceprintEngine.PICOVOICE_EAGLE.value,
+    engine: str = "pyannote",
+    notes: str | None = None,
 ) -> SpeakerVoiceprint:
-    """Create a new voiceprint enrollment record.
-
-    Args:
-        db: Database session.
-        salesperson_id: ID of the salesperson to enroll.
-        recording_id: Optional source recording ID.
-        engine: Voiceprint engine identifier.
-
-    Returns:
-        New SpeakerVoiceprint record (not yet committed).
-    """
-    voiceprint = SpeakerVoiceprint(
-        salesperson_id=uuid.UUID(salesperson_id),
-        recording_id=uuid.UUID(recording_id) if recording_id else None,
-        engine=engine,
-        status=EnrollmentStatus.PENDING.value,
-    )
-    db.add(voiceprint)
-    await db.commit()
-    await db.refresh(voiceprint)
-    logger.info(f"Created voiceprint record {voiceprint.id} for salesperson {salesperson_id}")
-    return voiceprint
-
-
-async def get_enrolled_voiceprints(
-    db: AsyncSession,
-    salesperson_id: str,
-    engine: str = VoiceprintEngine.PICOVOICE_EAGLE.value,
-) -> list[SpeakerVoiceprint]:
-    """Get all enrolled voiceprints for a salesperson.
-
-    Args:
-        db: Database session.
-        salesperson_id: ID of the salesperson.
-        engine: Voiceprint engine to filter by.
-
-    Returns:
-        List of enrolled SpeakerVoiceprint records.
-    """
-    result = await db.execute(
-        select(SpeakerVoiceprint)
-        .where(
-            SpeakerVoiceprint.salesperson_id == uuid.UUID(salesperson_id),
-            SpeakerVoiceprint.engine == engine,
-            SpeakerVoiceprint.status == EnrollmentStatus.ENROLLED.value,
+    """Create a pending voiceprint enrollment record."""
+    async with async_session_factory() as db:
+        voiceprint = SpeakerVoiceprint(
+            salesperson_id=salesperson_id,
+            recording_id=recording_id,
+            engine=engine,
+            status="pending",
+            sample_count=0,
+            notes=notes,
         )
-        .order_by(SpeakerVoiceprint.enrolled_at.desc())
-    )
-    return list(result.scalars().all())
+        db.add(voiceprint)
+        await db.commit()
+        await db.refresh(voiceprint)
+        logger.info("Created voiceprint enrollment: %s (engine=%s)", salesperson_id, engine)
+        return voiceprint
 
 
-async def get_store_voiceprints(
-    db: AsyncSession,
-    store_id: str,
-    engine: str = VoiceprintEngine.PICOVOICE_EAGLE.value,
-) -> list[SpeakerVoiceprint]:
-    """Get all enrolled voiceprints for all salespeople in a store.
+async def get_enrolled_voiceprints(store_id: str) -> list[dict]:
+    """Get all enrolled voiceprints for a store's salespeople."""
+    from sqlalchemy import text
 
-    Used for pre-diarization matching — check if any audio segments
-    match known salespeople at the store.
-
-    Args:
-        db: Database session.
-        store_id: ID of the store.
-        engine: Voiceprint engine to filter by.
-
-    Returns:
-        List of enrolled SpeakerVoiceprint records for the store.
-    """
-    from src.models.salesperson import Salesperson
-
-    sp_ids = select(Salesperson.id).where(
-        Salesperson.store_id == uuid.UUID(store_id)
-    )
-    result = await db.execute(
-        select(SpeakerVoiceprint)
-        .where(
-            SpeakerVoiceprint.salesperson_id.in_(sp_ids),
-            SpeakerVoiceprint.engine == engine,
-            SpeakerVoiceprint.status == EnrollmentStatus.ENROLLED.value,
+    async with async_session_factory() as db:
+        result = await db.execute(
+            text("""
+                SELECT vp.id, vp.salesperson_id, vp.engine, vp.voiceprint_bytes,
+                       s.name as salesperson_name
+                FROM speaker_voiceprints vp
+                JOIN salespeople s ON s.id = vp.salesperson_id
+                WHERE s.store_id = :store_id AND vp.status = 'enrolled'
+            """),
+            {"store_id": store_id},
         )
-    )
-    return list(result.scalars().all())
+
+        voiceprints = []
+        for row in result:
+            voiceprints.append({
+                "voiceprint_id": str(row[0]),
+                "salesperson_id": str(row[1]),
+                "engine": row[2],
+                "voiceprint_data": row[3],
+                "salesperson_name": row[4],
+            })
+
+        return voiceprints
 
 
 async def complete_enrollment(
-    db: AsyncSession,
     voiceprint_id: str,
-    voiceprint_bytes: bytes,
-    sample_duration_seconds: float,
-    sample_count: int,
-) -> SpeakerVoiceprint:
-    """Mark a voiceprint enrollment as complete.
+    voiceprint_data: bytes,
+    engine: str = "pyannote",
+    sample_duration_seconds: float | None = None,
+) -> bool:
+    """Complete voiceprint enrollment with actual voiceprint data."""
+    async with async_session_factory() as db:
+        result = await db.execute(
+            update(SpeakerVoiceprint)
+            .where(SpeakerVoiceprint.id == voiceprint_id)
+            .values(
+                engine=engine,
+                voiceprint_bytes=voiceprint_data,
+                status="enrolled",
+                sample_duration_seconds=sample_duration_seconds,
+                sample_count=1,
+            )
+        )
+        await db.commit()
+        logger.info("Completed voiceprint enrollment: %s", voiceprint_id)
+        return result.rowcount > 0
 
-    Args:
-        db: Database session.
-        voiceprint_id: ID of the voiceprint record.
-        voiceprint_bytes: Serialized voiceprint profile.
-        sample_duration_seconds: Total enrollment audio duration.
-        sample_count: Number of audio samples used.
+
+async def match_speaker(
+    audio_bytes: bytes,
+    store_id: str,
+    engine: str = "pyannote",
+) -> dict | None:
+    """Match an audio sample against enrolled voiceprints for a store.
 
     Returns:
-        Updated SpeakerVoiceprint record.
-
-    Raises:
-        ValueError: If voiceprint record not found.
+        {"salesperson_id": ..., "salesperson_name": ..., "confidence": ...}
+        or None if no match found above threshold
     """
-    from datetime import datetime
+    # Extract embedding from the sample
+    sample_embedding = extract_embedding(audio_bytes, engine=engine)
+    if sample_embedding is None:
+        logger.warning("Could not extract embedding for speaker matching")
+        return None
 
-    result = await db.execute(
-        select(SpeakerVoiceprint)
-        .where(SpeakerVoiceprint.id == uuid.UUID(voiceprint_id))
-    )
-    voiceprint = result.scalar_one_or_none()
-    if not voiceprint:
-        raise ValueError(f"Voiceprint record {voiceprint_id} not found")
+    # Get enrolled voiceprints for this store
+    enrolled = await get_enrolled_voiceprints(store_id)
+    if not enrolled:
+        logger.info("No enrolled voiceprints for store %s", store_id)
+        return None
 
-    voiceprint.voiceprint_bytes = voiceprint_bytes
-    voiceprint.status = EnrollmentStatus.ENROLLED.value
-    voiceprint.sample_duration_seconds = sample_duration_seconds
-    voiceprint.sample_count = sample_count
-    voiceprint.enrolled_at = datetime.utcnow()
+    # Compare against each enrolled voiceprint
+    best_match = None
+    best_similarity = 0.0
 
-    await db.commit()
-    await db.refresh(voiceprint)
-    logger.info(f"Completed enrollment for voiceprint {voiceprint_id}")
-    return voiceprint
+    for vp in enrolled:
+        if vp["voiceprint_data"] is None:
+            continue
 
+        try:
+            enrolled_embedding = np.frombuffer(vp["voiceprint_data"], dtype=np.float32)
+            sim = cosine_similarity(sample_embedding, enrolled_embedding)
 
-# --- Engine Integration (Scaffold) ---
+            if sim > best_similarity:
+                best_similarity = sim
+                best_match = vp
+        except Exception as e:
+            logger.warning("Failed to compare voiceprint %s: %s", vp["voiceprint_id"], e)
 
-def get_engine(engine_type: str = VoiceprintEngine.PICOVOICE_EAGLE.value) -> VoiceprintEngineProtocol:
-    """Factory for voiceprint engine instances.
-
-    Args:
-        engine_type: Engine identifier string.
-
-    Returns:
-        Voiceprint engine implementing VoiceprintEngineProtocol.
-
-    Raises:
-        NotImplementedError: If engine SDK is not installed.
-    """
-    if engine_type == VoiceprintEngine.PICOVOICE_EAGLE.value:
-        raise NotImplementedError(
-            "Picovoice Eagle requires the 'pveagle' package and an access key. "
-            "Install with: pip install pveagle && set PICOVOICE_ACCESS_KEY env var. "
-            "See: https://picovoice.ai/docs/eagle/python/"
+    if best_match and best_similarity >= SIMILARITY_THRESHOLD:
+        logger.info(
+            "Speaker matched: %s (confidence=%.2f)",
+            best_match["salesperson_name"],
+            best_similarity,
         )
-    elif engine_type == VoiceprintEngine.RESEMBLYZER.value:
-        raise NotImplementedError(
-            "Resemblyzer requires the 'resemblyzer' package. "
-            "Install with: pip install resemblyzer. "
-            "See: https://github.com/resemble-ai/Resemblyzer"
-        )
-    else:
-        raise ValueError(f"Unknown voiceprint engine: {engine_type}")
+        return {
+            "salesperson_id": best_match["salesperson_id"],
+            "salesperson_name": best_match["salesperson_name"],
+            "confidence": round(best_similarity, 3),
+        }
+
+    logger.info("No speaker match above threshold (%.2f < %.2f)", best_similarity, SIMILARITY_THRESHOLD)
+    return None

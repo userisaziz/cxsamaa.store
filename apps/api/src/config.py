@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret: str = "change-me-to-a-random-secret-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 15
-    jwt_refresh_token_expire_days: int = 7
+    jwt_access_token_expire_minutes: int = 1440  # 24 hours for sharing
+    jwt_refresh_token_expire_days: int = 30
 
     # Storage
     storage_backend: str = "local"
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     app_port: int = 8000
 
     # CORS
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,https://*.ngrok-free.dev"
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -5,8 +5,8 @@ Revises: b2c3d4e5f6g7
 Create Date: 2025-01-15
 
 Creates the speaker_voiceprints table for Phase C voiceprint enrollment.
-Stores serialized voiceprint profiles linked to salespeople, enabling
-pre-diarization speaker identification for known salespeople.
+Stores speaker embedding vectors linked to salespeople, enabling
+cross-conversation speaker identification. Free engines: pyannote, resemblyzer.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -32,14 +32,14 @@ def upgrade() -> None:
             "engine",
             sa.String(50),
             nullable=False,
-            server_default="picovoice_eagle",
-            comment="Voiceprint engine: picovoice_eagle, resemblyzer, etc.",
+            server_default="pyannote",
+            comment="Voiceprint engine: pyannote, resemblyzer",
         ),
         sa.Column(
             "voiceprint_bytes",
             sa.LargeBinary(),
             nullable=True,
-            comment="Serialized voiceprint profile data",
+            comment="Serialized speaker embedding vector (float32 bytes)",
         ),
         sa.Column(
             "status",

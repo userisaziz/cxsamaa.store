@@ -76,7 +76,7 @@ export function ConversationDrawer({ conversation, open, onOpenChange }: Convers
                 Conversation · {formatTime(conversation.start_time)} – {formatTime(conversation.end_time)}
               </SheetTitle>
               <SheetDescription className="text-sm">
-                {conversation.segment_count} transcript segments · {conversation.duration ? formatTime(conversation.duration) : '—'}
+                {conversation.segment_count} transcript segments · {Math.round(conversation.end_time - conversation.start_time)}s duration
               </SheetDescription>
             </SheetHeader>
 

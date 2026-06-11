@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Optimize for external access
+  compress: true,
 };
 
 export default nextConfig;
