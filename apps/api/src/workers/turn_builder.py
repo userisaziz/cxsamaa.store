@@ -2,11 +2,14 @@
 import logging
 import uuid
 
+from celery.exceptions import Ignore
+
 from src.ai.conversation_builder import build_conversation_turns
 from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import ConversationTurn, WordTranscript
 from src.workers.celery_app import celery_app
+from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -88,8 +91,7 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
         word_transcripts = _get_word_transcripts_sync(recording_id)
         if not word_transcripts:
             logger.warning("[%s] No word transcripts found — cannot build turns", recording_id)
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, "No word transcripts")
-            return recording_id
+            fail_and_halt(recording_id, "No word transcripts")
 
         logger.info("[%s] Building turns from %d words", recording_id, len(word_transcripts))
 
@@ -97,8 +99,8 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
         turns = build_conversation_turns(word_transcripts)
 
         if not turns:
-            logger.warning("[%s] No turns built", recording_id)
-            turns = []
+            logger.warning("[%s] No turns built from word transcripts", recording_id)
+            fail_and_halt(recording_id, "No turns built from word transcripts")
 
         # Store turns in DB
         _store_turns_sync(recording_id, turns)
@@ -110,6 +112,8 @@ def build_conversation_turns_task(self, recording_id: str) -> str:
         )
         return recording_id
 
+    except PipelineHalted:
+        raise Ignore()
     except Exception as exc:
         logger.error("[%s] Turn building failed: %s", recording_id, exc, exc_info=True)
         if self.request.retries < self.max_retries:

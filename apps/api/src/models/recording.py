@@ -47,6 +47,7 @@ class Recording(Base):
     )
     silence_gaps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     speech_regions: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # VAD-detected speech-active regions
+    chunk_manifest: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # Chunk boundaries for parallel processing
 
     # Relationships
     salesperson: Mapped["Salesperson"] = relationship(

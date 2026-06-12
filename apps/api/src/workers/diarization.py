@@ -3,19 +3,23 @@ import logging
 import uuid
 from collections import Counter
 
+from celery import chord, group
+from celery.exceptions import Ignore
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.ai.diarizer import assign_speaker_labels, diarize_audio as diarize_audio_api
 from src.config import settings
 from src.models.recording import RecordingStatus
-from src.models.transcript import TranscriptSegment
+from src.models.transcript import TranscriptSegment, WordTranscript
 from src.storage.local import get_storage
 from src.workers.celery_app import celery_app
+from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _download_audio_sync,
     _get_recording_sync,
     _update_recording_status_sync,
+    load_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,37 @@ def _get_transcript_segments_sync(recording_id: str) -> list[dict]:
             {"start": row.start_time, "end": row.end_time, "text": row.text}
             for row in rows
         ]
+
+
+def _update_word_speaker_labels_sync(recording_id: str, labeled_segments: list[dict]) -> None:
+    """Propagate segment speaker labels to word-level transcripts by time containment.
+
+    Assigns each word the speaker label of the segment containing its midpoint.
+    Uses an O(W + S) sweep since both words and segments are time-ordered.
+    """
+    segs = sorted(labeled_segments, key=lambda s: s["start"])
+    with _SessionLocal() as session:
+        words = (
+            session.query(WordTranscript)
+            .filter(WordTranscript.recording_id == uuid.UUID(recording_id))
+            .order_by(WordTranscript.start_time)
+            .all()
+        )
+        si = 0
+        for word in words:
+            mid = (word.start_time + word.end_time) / 2.0
+            # Advance segment pointer
+            while si < len(segs) - 1 and segs[si]["end"] < mid:
+                si += 1
+            word.speaker_label = (
+                segs[si]["speaker"]
+                if segs[si]["start"] <= mid <= segs[si]["end"]
+                else "UNKNOWN"
+            )
+        session.commit()
+    logger.info(
+        "[%s] Updated speaker labels for %d words", recording_id, len(words)
+    )
 
 
 def _update_speaker_labels_sync(recording_id: str, labeled_segments: list[dict]) -> None:
@@ -98,22 +133,19 @@ def diarize_audio(self, recording_id: str) -> str:
 
         transcript_segments = _get_transcript_segments_sync(recording_id)
         if not transcript_segments:
-            # FIX 2: status update on early-return path so recording isn't
-            # left stuck in DIARIZING indefinitely.
-            logger.warning(
-                "[%s] No transcript segments found — skipping speaker assignment",
-                recording_id,
-            )
-            return recording_id
+            fail_and_halt(recording_id, "No transcript segments found after transcription")
 
         labeled_segments = assign_speaker_labels(transcript_segments, speaker_segments)
         _update_speaker_labels_sync(recording_id, labeled_segments)
+        _update_word_speaker_labels_sync(recording_id, labeled_segments)
 
         speaker_counts = Counter(seg["speaker"] for seg in labeled_segments)
         logger.info("[%s] Speaker distribution: %s", recording_id, dict(speaker_counts))
 
         return recording_id
 
+    except PipelineHalted:
+        raise Ignore()
     except Exception as exc:
         logger.error("[%s] Diarization failed: %s", recording_id, exc, exc_info=True)
 
@@ -125,3 +157,160 @@ def diarize_audio(self, recording_id: str) -> str:
 
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
         raise
+
+
+# ---------------------------------------------------------------------------
+# Parallel chunk tasks (dispatched via chord)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="dispatch_diarization")
+def dispatch_diarization(self, recording_id: str):
+    """Dispatch parallel diarization chunk tasks or take fast path.
+
+    Reads the chunk manifest produced by preprocessing. If the recording
+    is short enough, delegates to the existing single-task fast path.
+    Otherwise replaces itself with a chord of parallel chunk tasks.
+
+    Since chunks are split at silence-gap boundaries (conversation
+    boundaries), no cross-chunk speaker reconciliation is needed.
+    """
+    logger.info("[%s] Dispatching diarization", recording_id)
+    _update_recording_status_sync(recording_id, RecordingStatus.DIARIZING)
+
+    manifest = load_manifest(recording_id)
+
+    if not manifest["needs_chunking"]:
+        # Fast path: short recording, use existing task directly
+        try:
+            return diarize_audio(recording_id)
+        except PipelineHalted:
+            raise Ignore()
+
+    # Build parallel chunk group
+    header = group(
+        diarize_chunk.s(
+            recording_id,
+            chunk["index"],
+            chunk["file"],
+        )
+        for chunk in manifest["chunks"]
+    )
+
+    logger.info(
+        "[%s] Dispatching %d parallel diarization chunks",
+        recording_id, len(manifest["chunks"]),
+    )
+
+    # Replace self with chord: header runs in parallel, callback merges
+    raise self.replace(
+        chord(header, merge_diarization_results.s(recording_id))
+    )
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120,
+                 soft_time_limit=1800, time_limit=2400,
+                 name="diarize_chunk")
+def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
+    """Diarize a single audio chunk. Idempotent with acks_late.
+
+    Downloads only its own chunk file from storage.
+    Returns a dict with speaker segments — never raises past max_retries,
+    returns a failure sentinel instead to prevent chord errors.
+    """
+    logger.info(
+        "[%s] Diarizing chunk %d (%s)", recording_id, chunk_index, chunk_file,
+    )
+    try:
+        storage = get_storage()
+        chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
+        chunk_data = _download_audio_sync(storage, chunk_key)
+
+        speaker_segments = diarize_audio_api(chunk_data)
+
+        logger.info(
+            "[%s] Chunk %d: %d speaker segments",
+            recording_id, chunk_index, len(speaker_segments),
+        )
+
+        return {
+            "chunk_index": chunk_index,
+            "speaker_segments": speaker_segments,
+            "failed": False,
+        }
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        # Return sentinel instead of raising — prevents chord error
+        logger.error(
+            "[%s] Diarization chunk %d failed permanently: %s",
+            recording_id, chunk_index, exc,
+        )
+        return {
+            "chunk_index": chunk_index,
+            "speaker_segments": [],
+            "failed": True,
+            "error": str(exc),
+        }
+
+
+@celery_app.task(bind=True, name="merge_diarization_results")
+def merge_diarization_results(self, chunk_results: list, recording_id: str):
+    """Merge diarization results from all chunks and assign speaker labels.
+
+    Chord callback that receives a list of chunk result dicts.
+    Since chunks are split at silence-gap boundaries, no cross-chunk
+    speaker reconciliation is needed — each chunk contains complete
+    conversations with independently valid speaker labels.
+
+    Assigns speaker labels to both TranscriptSegment and WordTranscript.
+
+    Returns recording_id for the next pipeline stage.
+    """
+    logger.info("[%s] Merging %d diarization chunk results", recording_id, len(chunk_results))
+
+    manifest = load_manifest(recording_id)
+    chunk_offsets = {c["index"]: c["start_ms"] / 1000.0 for c in manifest["chunks"]}
+
+    # Collect all speaker segments with adjusted timestamps
+    all_speaker_segments = []
+    failed_count = 0
+    for result in chunk_results:
+        if result.get("failed"):
+            logger.warning(
+                "[%s] Skipping failed diarization chunk %d",
+                recording_id, result["chunk_index"],
+            )
+            failed_count += 1
+            continue
+
+        offset = chunk_offsets.get(result["chunk_index"], 0.0)
+        for seg in result["speaker_segments"]:
+            seg["start"] = seg["start"] + offset
+            seg["end"] = seg["end"] + offset
+            all_speaker_segments.append(seg)
+
+    logger.info(
+        "[%s] Collected %d speaker segments from %d/%d chunks",
+        recording_id, len(all_speaker_segments),
+        len(chunk_results) - failed_count, len(chunk_results),
+    )
+
+    # Assign speaker labels to transcript segments
+    transcript_segments = _get_transcript_segments_sync(recording_id)
+    if not transcript_segments:
+        fail_and_halt(recording_id, "No transcript segments found after transcription")
+
+    labeled_segments = assign_speaker_labels(transcript_segments, all_speaker_segments)
+    _update_speaker_labels_sync(recording_id, labeled_segments)
+
+    # CRITICAL: Also update WordTranscript speaker labels so turn_builder works
+    _update_word_speaker_labels_sync(recording_id, labeled_segments)
+
+    speaker_counts = Counter(seg["speaker"] for seg in labeled_segments)
+    logger.info(
+        "[%s] Speaker distribution: %s (from %d chunks, %d failed)",
+        recording_id, dict(speaker_counts),
+        len(chunk_results), failed_count,
+    )
+
+    return recording_id

@@ -2,11 +2,14 @@
 import logging
 import uuid
 
+from celery.exceptions import Ignore
+
 from src.ai.role_classifier import classify_speaker_roles
 from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import ConversationTurn, SpeakerRole
 from src.workers.celery_app import celery_app
+from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -93,8 +96,7 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
         conversation_turns = _get_conversation_turns_sync(recording_id)
         if not conversation_turns:
             logger.warning("[%s] No conversation turns found — cannot classify roles", recording_id)
-            _update_recording_status_sync(recording_id, RecordingStatus.FAILED, "No conversation turns")
-            return recording_id
+            fail_and_halt(recording_id, "No conversation turns")
 
         logger.info("[%s] Classifying roles from %d turns", recording_id, len(conversation_turns))
 
@@ -125,6 +127,8 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
         )
         return recording_id
 
+    except PipelineHalted:
+        raise Ignore()
     except Exception as exc:
         logger.error("[%s] Role classification failed: %s", recording_id, exc, exc_info=True)
         if self.request.retries < self.max_retries:

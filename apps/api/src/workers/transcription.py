@@ -3,6 +3,8 @@ import io
 import logging
 import uuid
 
+from celery import chord, group
+from celery.exceptions import Ignore
 from pydub import AudioSegment
 
 from src.ai.stt import transcribe_audio
@@ -11,11 +13,13 @@ from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment
 from src.storage.local import get_storage
 from src.workers.celery_app import celery_app
+from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _download_audio_sync,
     _get_recording_sync,
     _update_recording_status_sync,
     _upload_audio_sync,
+    load_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,8 +117,7 @@ def transcribe_audio_task(self, recording_id: str) -> str:
             )
 
         if not segments:
-            logger.warning("[%s] No transcript segments produced", recording_id)
-            segments = []
+            fail_and_halt(recording_id, "No transcript segments produced by STT")
 
         # Store transcript in database
         _store_transcript_sync(recording_id, segments, words)
@@ -122,12 +125,177 @@ def transcribe_audio_task(self, recording_id: str) -> str:
         logger.info("[%s] Transcription complete: %d segments", recording_id, len(segments))
         return recording_id
 
+    except PipelineHalted:
+        raise Ignore()
     except Exception as exc:
         logger.error("[%s] Transcription failed: %s", recording_id, exc, exc_info=True)
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
         raise
+
+
+# ---------------------------------------------------------------------------
+# Parallel chunk tasks (dispatched via chord)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="dispatch_transcription")
+def dispatch_transcription(self, recording_id: str):
+    """Dispatch parallel transcription chunk tasks or take fast path.
+
+    Reads the chunk manifest produced by preprocessing. If the recording
+    is short enough, delegates to the existing single-task fast path.
+    Otherwise replaces itself with a chord of parallel chunk tasks.
+    """
+    logger.info("[%s] Dispatching transcription", recording_id)
+    _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
+
+    manifest = load_manifest(recording_id)
+
+    if not manifest["needs_chunking"]:
+        # Fast path: short recording, use existing task directly
+        try:
+            return transcribe_audio_task(recording_id)
+        except PipelineHalted:
+            raise Ignore()
+
+    # Build parallel chunk group
+    header = group(
+        transcribe_chunk.s(
+            recording_id,
+            chunk["index"],
+            chunk["file"],
+        )
+        for chunk in manifest["chunks"]
+    )
+
+    logger.info(
+        "[%s] Dispatching %d parallel transcription chunks",
+        recording_id, len(manifest["chunks"]),
+    )
+
+    # Replace self with chord: header runs in parallel, callback merges
+    raise self.replace(
+        chord(header, merge_transcription_results.s(recording_id))
+    )
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60,
+                 soft_time_limit=600, time_limit=900,
+                 name="transcribe_chunk")
+def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
+    """Transcribe a single audio chunk. Idempotent with acks_late.
+
+    Downloads only its own chunk file (~28MB for 15-min WAV) from storage,
+    not the full recording.
+
+    Returns a dict (JSON-serializable) — never raises past max_retries,
+    returns a failure sentinel instead to prevent chord errors.
+    """
+    logger.info(
+        "[%s] Transcribing chunk %d (%s)", recording_id, chunk_index, chunk_file,
+    )
+    try:
+        storage = get_storage()
+        chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
+        chunk_data = _download_audio_sync(storage, chunk_key)
+
+        result = transcribe_audio(chunk_data)
+        segments = result.get("segments", [])
+        words = result.get("words", [])
+
+        logger.info(
+            "[%s] Chunk %d: %d segments, %d words",
+            recording_id, chunk_index, len(segments), len(words),
+        )
+
+        return {
+            "chunk_index": chunk_index,
+            "segments": segments,
+            "words": words,
+            "failed": False,
+        }
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        # Return sentinel instead of raising — prevents chord error
+        logger.error(
+            "[%s] Chunk %d failed permanently: %s",
+            recording_id, chunk_index, exc,
+        )
+        return {
+            "chunk_index": chunk_index,
+            "segments": [],
+            "words": [],
+            "failed": True,
+            "error": str(exc),
+        }
+
+
+@celery_app.task(bind=True, name="merge_transcription_results")
+def merge_transcription_results(self, chunk_results: list, recording_id: str):
+    """Merge chunk transcription results, dedup overlaps, store to DB.
+
+    Chord callback that receives a list of chunk result dicts.
+    Adjusts timestamps by chunk offset, deduplicates overlap regions,
+    and stores the final merged transcript to the database.
+
+    Returns recording_id for the next pipeline stage.
+    """
+    logger.info("[%s] Merging %d transcription chunk results", recording_id, len(chunk_results))
+
+    # Separate successful from failed chunks
+    successful = [r for r in chunk_results if not r.get("failed")]
+    failed = [r for r in chunk_results if r.get("failed")]
+    if failed:
+        logger.warning(
+            "[%s] %d transcription chunks failed: %s",
+            recording_id, len(failed),
+            [r["chunk_index"] for r in failed],
+        )
+
+    if not successful:
+        fail_and_halt(recording_id, "All transcription chunks failed")
+
+    # Load manifest to get chunk offsets
+    manifest = load_manifest(recording_id)
+    chunk_offsets = {c["index"]: c["start_ms"] / 1000.0 for c in manifest["chunks"]}
+
+    # Adjust timestamps by chunk offset and collect
+    all_segments = []
+    all_words = []
+    for result in successful:
+        offset = chunk_offsets.get(result["chunk_index"], 0.0)
+
+        for seg in result["segments"]:
+            seg["start"] = seg["start"] + offset
+            seg["end"] = seg["end"] + offset
+            if seg["start"] < seg["end"]:
+                all_segments.append(seg)
+
+        for word in result["words"]:
+            word["start"] = word["start"] + offset
+            word["end"] = word["end"] + offset
+            if word["start"] < word["end"]:
+                all_words.append(word)
+
+    # Dedup overlap regions (reuse existing functions)
+    all_words = _deduplicate_words(all_words)
+    all_segments = _deduplicate_segments(all_segments)
+
+    if not all_segments:
+        fail_and_halt(recording_id, "No transcript segments produced after merging chunks")
+
+    # Store to DB (clear-and-reinsert for idempotency)
+    _store_transcript_sync(recording_id, all_segments, all_words)
+
+    logger.info(
+        "[%s] Transcription merge complete: %d segments, %d words (from %d/%d chunks)",
+        recording_id, len(all_segments), len(all_words),
+        len(successful), len(chunk_results),
+    )
+
+    return recording_id
 
 
 def _transcribe_in_chunks_with_overlap(
