@@ -1,0 +1,160 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+
+# Prevent concurrent deployments
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add Oracle VM to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Oracle Cloud
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -e
+            
+            echo "════════════════════════════════════════"
+            echo "  🚀 SAMAA Production Deployment"
+            echo "════════════════════════════════════════"
+            echo ""
+            
+            # Navigate to app directory
+            cd /home/opc/xsamaa-ai-pipeline
+            
+            # Show current commit
+            echo "📍 Current commit:"
+            git log --oneline -1
+            echo ""
+            
+            # Pull latest changes
+            echo "📦 Pulling latest code..."
+            git pull origin main
+            echo "✅ Code updated"
+            echo ""
+            
+            # Install backend dependencies
+            echo "🔧 Installing backend dependencies..."
+            cd apps/api
+            source .venv/bin/activate
+            uv pip install -e '.[prod]' --quiet
+            echo "✅ Backend dependencies installed"
+            echo ""
+            
+            # Build frontend
+            echo "🎨 Building frontend..."
+            cd ../web
+            npm install --quiet
+            npm run build
+            echo "✅ Frontend built"
+            echo ""
+            
+            # Run database migrations
+            echo "🗄️ Running database migrations..."
+            cd ../api
+            source .venv/bin/activate
+            export $(cat ../../.env.prod | xargs)
+            alembic upgrade head
+            echo "✅ Migrations complete"
+            echo ""
+            
+            cd ../..
+            
+            # Restart services with health checks
+            echo "🔄 Restarting services..."
+            
+            # Restart FastAPI
+            sudo systemctl restart samaa-api
+            echo "  ✓ FastAPI restarted"
+            
+            # Restart Celery
+            sudo systemctl restart samaa-celery
+            echo "  ✓ Celery restarted"
+            
+            # Restart Next.js
+            sudo systemctl restart samaa-web
+            echo "  ✓ Next.js restarted"
+            echo ""
+            
+            # Health checks
+            echo "🏥 Running health checks..."
+            sleep 5
+            
+            FAILED=0
+            
+            if systemctl is-active --quiet samaa-api; then
+              echo "  ✅ FastAPI is running"
+            else
+              echo "  ❌ FastAPI failed to start"
+              FAILED=1
+            fi
+            
+            if systemctl is-active --quiet samaa-celery; then
+              echo "  ✅ Celery is running"
+            else
+              echo "  ❌ Celery failed to start"
+              FAILED=1
+            fi
+            
+            if systemctl is-active --quiet samaa-web; then
+              echo "  ✅ Next.js is running"
+            else
+              echo "  ❌ Next.js failed to start"
+              FAILED=1
+            fi
+            
+            echo ""
+            
+            if [ $FAILED -eq 0 ]; then
+              echo "════════════════════════════════════════"
+              echo "  🎉 Deployment Successful!"
+              echo "════════════════════════════════════════"
+              echo ""
+              echo "🌐 Application: https://${{ vars.DOMAIN_NAME }}"
+              echo "📝 API Docs:     https://${{ vars.DOMAIN_NAME }}/docs"
+              echo "🔌 API Health:   https://${{ vars.DOMAIN_NAME }}/health"
+              echo ""
+            else
+              echo "════════════════════════════════════════"
+              echo "  ❌ Deployment Failed!"
+              echo "════════════════════════════════════════"
+              echo ""
+              echo "Check logs:"
+              echo "  sudo journalctl -u samaa-api -n 100"
+              echo "  sudo journalctl -u samaa-celery -n 100"
+              echo "  sudo journalctl -u samaa-web -n 100"
+              exit 1
+            fi
+          EOF
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo ""
+          echo "Check GitHub Actions logs for details."
+          echo "SSH into Oracle VM to investigate:"
+          echo "  ssh opc@${{ secrets.SSH_HOST }}"
+          echo "  sudo journalctl -u samaa-api -n 100 --no-pager"

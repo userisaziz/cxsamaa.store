@@ -109,15 +109,27 @@ async def stream_recording_audio(
     recording = await get_recording(db, recording_id)
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
+
     storage = get_storage()
-    file_path = storage.base_dir / recording.file_url
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(
-        path=str(file_path),
-        media_type=recording.format,
-        headers={"Accept-Ranges": "bytes"},
-    )
+
+    # For local storage, serve file directly
+    if hasattr(storage, "base_dir"):
+        file_path = storage.base_dir / recording.file_url
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        return FileResponse(
+            path=str(file_path),
+            media_type=recording.format,
+            headers={"Accept-Ranges": "bytes"},
+        )
+
+    # For R2/cloud storage, redirect to signed URL
+    try:
+        signed_url = await storage.get_signed_url(recording.file_url, expires_in=900)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=signed_url, status_code=302)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {e}")
 
 
 @router.get("/{recording_id}", response_model=RecordingResponse)

@@ -176,6 +176,25 @@
     }
   }
 
+  /* Mobile touch target sizing */
+  @media (max-width: 767px) {
+    button, 
+    [role="button"],
+    a,
+    select,
+    input[type="submit"],
+    input[type="button"] {
+      min-height: 44px;
+    }
+    
+    /* Exception for small icon buttons */
+    button.h-8,
+    button.h-6 {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
   /* Custom scrollbar styling */
   ::-webkit-scrollbar {
     width: 8px;

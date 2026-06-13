@@ -72,10 +72,10 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
   };
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex flex-col sm:flex-row items-start sm:items-center gap-2", className)}>
       {/* Preset selector */}
       <Select value={activePreset} onValueChange={handlePresetChange}>
-        <SelectTrigger className="w-[180px] h-9">
+        <SelectTrigger className="w-[160px] sm:w-[180px] h-9">
           <CalendarIcon className="h-4 w-4 mr-2" />
           <SelectValue />
         </SelectTrigger>

@@ -51,7 +51,7 @@ export function SkillRadarCompare({ data, title = "Skill Comparison" }: SkillRad
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="h-[300px]">
+          <div className="h-[260px] sm:h-[280px] lg:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
                 <PolarGrid className="stroke-muted" />
@@ -81,7 +81,7 @@ export function SkillRadarCompare({ data, title = "Skill Comparison" }: SkillRad
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-[300px] flex-col items-center justify-center text-center">
+          <div className="flex h-[260px] sm:h-[280px] lg:h-[300px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No skill data yet</p>
           </div>

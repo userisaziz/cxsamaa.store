@@ -175,7 +175,7 @@ export default function SalespersonDetailPage() {
   const conversionRate = performance?.conversion_rate;
 
   return (
-    <div className="space-y-6 lg:space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Breadcrumbs */}
       <Breadcrumbs
         items={[
@@ -218,7 +218,7 @@ export default function SalespersonDetailPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Conversations"
           value={performance?.total_conversations ?? 0}

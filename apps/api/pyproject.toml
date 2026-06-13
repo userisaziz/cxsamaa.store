@@ -21,9 +21,12 @@ dependencies = [
     "pgvector>=0.3.0",
     "pydub>=0.25.1",
     "numpy>=2.0.0",
+    "scikit-learn>=1.5.0",
+    "scipy>=1.14.0",
     "pyannote.audio>=3.3.0",
     "torch>=2.4.0",
     "torchaudio>=2.4.0",
+    "boto3>=1.35.0",
 ]
 
 [project.optional-dependencies]

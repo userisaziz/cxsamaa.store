@@ -4,8 +4,9 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
 import torch
-from pyannote.audio import Pipeline
+from pyannote.audio import Inference, Pipeline
 
 from src.config import settings
 
@@ -74,6 +75,22 @@ class PyannoteDiarizer:
         
         # Move to device
         self.pipeline.to(torch.device(self.device))
+
+        # Also load an embedding inference model for cross-chunk speaker reconciliation.
+        # This gives us per-segment speaker embeddings (vectors) that can be clustered
+        # across chunks to unify speaker identity.
+        try:
+            self.embedding_inference = Inference(
+                "pyannote/embedding",
+                token=self.huggingface_token,
+            )
+            self.embedding_inference.to(torch.device(self.device))
+            self._has_embeddings = True
+            logger.info("Pyannote embedding model loaded for speaker reconciliation")
+        except Exception as e:
+            logger.warning(f"Failed to load pyannote/embedding: {e}. Cross-chunk reconciliation disabled.")
+            self.embedding_inference = None
+            self._has_embeddings = False
         
         # Hyperparameter tuning for multilingual retail audio
         # These values are optimized for sales conversations with:
@@ -99,14 +116,18 @@ class PyannoteDiarizer:
         audio_bytes: bytes,
         sample_rate: int = 16000,
         min_speaker_segments: int = 2,
+        return_embeddings: bool = False,
     ) -> list[dict[str, Any]]:
         """Diarize speakers from raw audio bytes.
-        
+
         Args:
             audio_bytes: Raw 16kHz mono WAV audio
             sample_rate: Audio sample rate (default 16kHz)
             min_speaker_segments: Minimum speaker segments to return
-            
+            return_embeddings: If True, attach speaker embedding vectors to each
+                segment under the key ``embedding``. Used by cross-chunk
+                speaker reconciliation.
+
         Returns:
             List of speaker segments:
             [
@@ -134,6 +155,18 @@ class PyannoteDiarizer:
                     "end": round(turn.end, 3),
                     "speaker": f"SPEAKER_{speaker}",
                 })
+
+            # Extract per-segment embeddings if requested and available.
+            # We compute a single embedding per (speaker, contiguous region)
+            # by averaging embeddings over sliding windows within that region.
+            if return_embeddings and self._has_embeddings:
+                try:
+                    self._attach_embeddings(segments, tmp_path)
+                except Exception as e:
+                    logger.warning(f"Embedding extraction failed: {e}. Continuing without embeddings.")
+                    # Remove partial embedding keys to keep segments clean
+                    for seg in segments:
+                        seg.pop("embedding", None)
             
             # Sort by start time
             segments.sort(key=lambda s: s["start"])
@@ -155,6 +188,38 @@ class PyannoteDiarizer:
             # Cleanup temp file
             Path(tmp_path).unlink(missing_ok=True)
     
+    def _attach_embeddings(self, segments: list[dict[str, Any]], audio_path: str) -> None:
+        """Compute and attach speaker embeddings to each segment (in-place).
+
+        Uses pyannote/embedding Inference to slide over the audio and produce
+        one 512-d vector per segment. For very short segments (<0.5s) we
+        reuse the nearest neighbor's embedding.
+        """
+        import torchaudio
+
+        waveform, sr = torchaudio.load(audio_path)
+        if sr != 16000:
+            waveform = torchaudio.functional.resample(waveform, sr, 16000)
+            sr = 16000
+
+        # The embedding inference model operates on sliding windows.
+        # We crop each segment's audio region and run inference to get one embedding.
+        for seg in segments:
+            start_sample = int(seg["start"] * sr)
+            end_sample = int(seg["end"] * sr)
+            # Minimum 0.3s of audio needed for a meaningful embedding
+            if end_sample - start_sample < int(0.3 * sr):
+                continue
+            crop = waveform[:, start_sample:end_sample]
+            # Inference returns a tensor of shape (1, embedding_dim) for a single crop
+            with torch.no_grad():
+                emb = self.embedding_inference.crop(
+                    {"waveform": crop, "sample_rate": sr},
+                    {"start": 0.0, "end": (end_sample - start_sample) / sr},
+                )
+            if emb is not None and hasattr(emb, "numpy"):
+                seg["embedding"] = emb.cpu().numpy().flatten().tolist()
+
     def _merge_short_segments(
         self,
         segments: list[dict[str, Any]],

@@ -23,6 +23,10 @@ class Conversation(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     segment_count: Mapped[int] = mapped_column(Integer, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audio_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+        comment="Path to pre-stitched conversation audio file in storage",
+    )
     recorded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

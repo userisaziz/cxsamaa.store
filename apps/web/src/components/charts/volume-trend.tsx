@@ -39,7 +39,7 @@ export function VolumeTrend({ data, title = "Conversation Volume" }: VolumeTrend
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="h-[240px]">
+          <div className="h-[200px] sm:h-[220px] lg:h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                 <defs>
@@ -70,7 +70,7 @@ export function VolumeTrend({ data, title = "Conversation Volume" }: VolumeTrend
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-[240px] flex-col items-center justify-center text-center">
+          <div className="flex h-[200px] sm:h-[220px] lg:h-[240px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No volume data yet</p>
           </div>

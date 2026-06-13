@@ -127,7 +127,7 @@ export default function BrandDashboardPage() {
     .sort((a, b) => (a.avg_overall_score ?? 100) - (b.avg_overall_score ?? 100));
 
   return (
-    <div className="space-y-6 lg:space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-border pb-4 sm:pb-6">
         <div>
@@ -138,7 +138,7 @@ export default function BrandDashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Stores"
           value={stores?.length ?? 0}
@@ -168,7 +168,7 @@ export default function BrandDashboardPage() {
       {/* Analytics Charts */}
       <div className="space-y-4">
         {/* Row 1: Outcome Donut + Conversion Gauge */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           <OutcomeDonut data={analytics?.outcome_distribution ?? []} />
           <ConversionGauge
             value={analytics?.conversion_rate ?? null}
@@ -205,7 +205,8 @@ export default function BrandDashboardPage() {
         </CardHeader>
         <CardContent>
           {stores && stores.length > 0 ? (
-            <div className="overflow-x-auto -mx-6 sm:mx-0">
+            <div className="overflow-x-auto -mx-4 sm:-mx-6 lg:mx-0">
+              <div className="min-w-[640px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -264,6 +265,7 @@ export default function BrandDashboardPage() {
                   ))}
               </TableBody>
             </Table>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">

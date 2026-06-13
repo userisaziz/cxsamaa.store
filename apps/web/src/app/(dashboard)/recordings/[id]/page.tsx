@@ -345,7 +345,7 @@ export default function RecordingDetailPage() {
         {/* Summary Cards */}
         {summary && (
           <>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-2">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
               <KPICard
                 title="Conversations"
                 value={summary.total_conversations}
@@ -358,7 +358,7 @@ export default function RecordingDetailPage() {
               />
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
                 <CardHeader className="flex flex-row items-center justify-between pb-1">
                   <CardTitle className="text-sm font-medium text-steel">

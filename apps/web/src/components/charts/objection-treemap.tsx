@@ -102,7 +102,7 @@ export function ObjectionTreemap({ data, title = "Top Objections", onObjectionCl
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="h-[260px]">
+          <div className="h-[220px] sm:h-[240px] lg:h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <Treemap
                 data={treemapData}
@@ -121,7 +121,7 @@ export function ObjectionTreemap({ data, title = "Top Objections", onObjectionCl
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-[260px] flex-col items-center justify-center text-center">
+          <div className="flex h-[220px] sm:h-[240px] lg:h-[260px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No objection data yet</p>
           </div>

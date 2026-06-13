@@ -61,7 +61,7 @@ export function StoreScatter({ data, title = "Store Comparison" }: StoreScatterP
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="h-[280px]">
+          <div className="h-[240px] sm:h-[260px] lg:h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -100,7 +100,7 @@ export function StoreScatter({ data, title = "Store Comparison" }: StoreScatterP
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-[280px] flex-col items-center justify-center text-center">
+          <div className="flex h-[240px] sm:h-[260px] lg:h-[280px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No store comparison data yet</p>
           </div>

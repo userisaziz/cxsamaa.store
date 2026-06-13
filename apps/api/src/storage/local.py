@@ -45,5 +45,7 @@ def get_storage() -> StorageBackend:
     """Factory function to get the configured storage backend."""
     if settings.storage_backend == "local":
         return LocalStorage()
-    # Future: add S3Storage()
+    elif settings.storage_backend == "r2":
+        from src.storage.r2 import R2Storage
+        return R2Storage()
     raise ValueError(f"Unknown storage backend: {settings.storage_backend}")

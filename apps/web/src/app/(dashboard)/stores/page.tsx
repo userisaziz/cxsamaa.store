@@ -23,7 +23,7 @@ export default function StoresPage() {
   });
 
   return (
-    <div className="space-y-6 lg:space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Page Header */}
       <div className="border-b border-border pb-4 sm:pb-6">
         <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Stores</h1>
@@ -49,7 +49,8 @@ export default function StoresPage() {
               ))}
             </div>
           ) : stores && stores.length > 0 ? (
-            <div className="overflow-x-auto -mx-6 sm:mx-0">
+            <div className="overflow-x-auto -mx-4 sm:-mx-6 lg:mx-0">
+              <div className="min-w-[500px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -83,6 +84,7 @@ export default function StoresPage() {
                 ))}
               </TableBody>
             </Table>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">

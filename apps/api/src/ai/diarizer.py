@@ -43,7 +43,11 @@ def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
     return _pyannote_diarizer
 
 
-def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[str, Any]]:
+def diarize_audio(
+    audio_bytes: bytes,
+    filename: str = "audio.wav",
+    return_embeddings: bool = False,
+) -> list[dict[str, Any]]:
     """Diarize speakers using pyannote.audio (primary) or NVIDIA NeMo (fallback).
 
     Pyannote.audio provides superior accuracy for multilingual retail sales audio:
@@ -51,12 +55,15 @@ def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[
     - Improved robustness with background noise
     - Optimized for Hindi/English/Arabic code-switching scenarios
     - Handles accent diversity across Middle East and South Asia
-    
+
     Falls back to NVIDIA NIM if pyannote is disabled or fails.
 
     Args:
         audio_bytes: Raw audio data (16kHz mono WAV)
         filename: Filename for the audio file
+        return_embeddings: If True, each segment dict will include an
+            ``embedding`` key with a float32 vector (used by cross-chunk
+            speaker reconciliation).
 
     Returns:
         List of speaker segments:
@@ -72,7 +79,7 @@ def diarize_audio(audio_bytes: bytes, filename: str = "audio.wav") -> list[dict[
             diarizer = _get_pyannote_diarizer()
             if diarizer:
                 logger.info(f"Using pyannote diarization ({len(audio_bytes)} bytes)")
-                segments = diarizer.diarize(audio_bytes)
+                segments = diarizer.diarize(audio_bytes, return_embeddings=return_embeddings)
                 if segments:
                     logger.info(f"Pyannote diarization successful: {len(segments)} segments")
                     return segments

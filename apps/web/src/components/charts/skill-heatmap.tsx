@@ -105,7 +105,7 @@ export function SkillHeatmap({ data, title = "Team Skill Heatmap" }: SkillHeatma
             </table>
           </div>
         ) : (
-          <div className="flex h-[200px] flex-col items-center justify-center text-center">
+          <div className="flex h-[180px] sm:h-[200px] lg:h-[220px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No skill data available</p>
           </div>

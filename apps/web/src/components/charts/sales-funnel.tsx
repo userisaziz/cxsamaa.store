@@ -238,7 +238,7 @@ export function SalesFunnel({
             </div>
           </>
         ) : (
-          <div className="flex h-[200px] flex-col items-center justify-center text-center px-5">
+          <div className="flex h-[200px] sm:h-[220px] lg:h-[240px] flex-col items-center justify-center text-center px-5">
             <Inbox className="h-8 w-8 text-stone/30 mb-2" />
             <p className="text-sm text-steel">No sales data yet</p>
             <p className="text-xs text-steel/40 mt-1">

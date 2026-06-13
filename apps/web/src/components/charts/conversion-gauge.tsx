@@ -40,7 +40,7 @@ export function ConversionGauge({
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="relative h-[200px]">
+          <div className="relative h-[180px] sm:h-[190px] lg:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 cx="50%"
@@ -73,7 +73,7 @@ export function ConversionGauge({
             </div>
           </div>
         ) : (
-          <div className="flex h-[200px] flex-col items-center justify-center text-center">
+          <div className="flex h-[180px] sm:h-[190px] lg:h-[200px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No conversion data yet</p>
           </div>

@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.ai.diarizer import assign_speaker_labels, diarize_audio as diarize_audio_api
+from src.ai.speaker_reconciliation import apply_speaker_mapping, reconcile_speakers_across_chunks
 from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment, WordTranscript
@@ -172,7 +173,9 @@ def dispatch_diarization(self, recording_id: str):
     Otherwise replaces itself with a chord of parallel chunk tasks.
 
     Since chunks are split at silence-gap boundaries (conversation
-    boundaries), no cross-chunk speaker reconciliation is needed.
+    boundaries), cross-chunk speaker reconciliation is applied after
+    merging to unify speaker labels across chunks using Agglomerative
+    Clustering on speaker embeddings.
     """
     logger.info("[%s] Dispatching diarization", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.DIARIZING)
@@ -225,10 +228,10 @@ def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
         chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
         chunk_data = _download_audio_sync(storage, chunk_key)
 
-        speaker_segments = diarize_audio_api(chunk_data)
+        speaker_segments = diarize_audio_api(chunk_data, return_embeddings=True)
 
         logger.info(
-            "[%s] Chunk %d: %d speaker segments",
+            "[%s] Chunk %d: %d speaker segments (with embeddings)",
             recording_id, chunk_index, len(speaker_segments),
         )
 
@@ -258,9 +261,8 @@ def merge_diarization_results(self, chunk_results: list, recording_id: str):
     """Merge diarization results from all chunks and assign speaker labels.
 
     Chord callback that receives a list of chunk result dicts.
-    Since chunks are split at silence-gap boundaries, no cross-chunk
-    speaker reconciliation is needed — each chunk contains complete
-    conversations with independently valid speaker labels.
+    Applies cross-chunk speaker reconciliation via Agglomerative
+    Clustering on speaker embeddings to unify labels across chunks.
 
     Assigns speaker labels to both TranscriptSegment and WordTranscript.
 
@@ -271,24 +273,59 @@ def merge_diarization_results(self, chunk_results: list, recording_id: str):
     manifest = load_manifest(recording_id)
     chunk_offsets = {c["index"]: c["start_ms"] / 1000.0 for c in manifest["chunks"]}
 
-    # Collect all speaker segments with adjusted timestamps
-    all_speaker_segments = []
-    failed_count = 0
+    # -----------------------------------------------------------------------
+    # Cross-chunk speaker reconciliation
+    # -----------------------------------------------------------------------
+    # If we have per-chunk speaker segments with embeddings, run reconciliation
+    # to unify labels across chunks. Otherwise fall back to the old behaviour.
+    _update_recording_status_sync(recording_id, RecordingStatus.RECONCILING)
+
+    chunk_speaker_segments_by_index: dict[int, list[dict]] = {}
     for result in chunk_results:
         if result.get("failed"):
-            logger.warning(
-                "[%s] Skipping failed diarization chunk %d",
-                recording_id, result["chunk_index"],
-            )
-            failed_count += 1
             continue
+        chunk_speaker_segments_by_index[result["chunk_index"]] = result["speaker_segments"]
 
-        offset = chunk_offsets.get(result["chunk_index"], 0.0)
-        for seg in result["speaker_segments"]:
-            seg["start"] = seg["start"] + offset
-            seg["end"] = seg["end"] + offset
-            all_speaker_segments.append(seg)
+    has_embeddings = any(
+        seg.get("embedding") is not None
+        for segs in chunk_speaker_segments_by_index.values()
+        for seg in segs
+    )
 
+    if has_embeddings and len(chunk_speaker_segments_by_index) >= 2:
+        # Build ordered lists aligned with chunk_offsets
+        sorted_indices = sorted(chunk_speaker_segments_by_index.keys())
+        ordered_segments = [chunk_speaker_segments_by_index[i] for i in sorted_indices]
+        ordered_offsets = [chunk_offsets.get(i, 0.0) for i in sorted_indices]
+
+        speaker_mapping = reconcile_speakers_across_chunks(
+            ordered_segments, ordered_offsets,
+        )
+        all_speaker_segments = apply_speaker_mapping(
+            ordered_segments, speaker_mapping, ordered_offsets,
+        )
+        logger.info(
+            "[%s] Cross-chunk reconciliation: %d segments with unified labels",
+            recording_id, len(all_speaker_segments),
+        )
+    else:
+        # Fallback: collect segments with adjusted timestamps (original behavior)
+        logger.info(
+            "[%s] Skipping cross-chunk reconciliation (no embeddings or single chunk)",
+            recording_id,
+        )
+        all_speaker_segments = []
+        for result in chunk_results:
+            if result.get("failed"):
+                continue
+            offset = chunk_offsets.get(result["chunk_index"], 0.0)
+            for seg in result["speaker_segments"]:
+                seg["start"] = seg["start"] + offset
+                seg["end"] = seg["end"] + offset
+                all_speaker_segments.append(seg)
+        all_speaker_segments.sort(key=lambda s: s["start"])
+
+    failed_count = sum(1 for r in chunk_results if r.get("failed"))
     logger.info(
         "[%s] Collected %d speaker segments from %d/%d chunks",
         recording_id, len(all_speaker_segments),

@@ -55,7 +55,7 @@ export function PerformanceBar({ data, title = "Salesperson Rankings" }: Perform
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <div className="h-[300px]">
+          <div className="h-[260px] sm:h-[280px] lg:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sorted} layout="vertical" margin={{ left: 20, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
@@ -85,7 +85,7 @@ export function PerformanceBar({ data, title = "Salesperson Rankings" }: Perform
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-[300px] flex-col items-center justify-center text-center">
+          <div className="flex h-[260px] sm:h-[280px] lg:h-[300px] flex-col items-center justify-center text-center">
             <Inbox className="h-8 w-8 text-stone/40 mb-2" />
             <p className="text-sm text-steel">No performance data yet</p>
           </div>

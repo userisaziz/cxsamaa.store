@@ -160,7 +160,7 @@ export default function CoachingPage() {
   }));
 
   return (
-    <div className="space-y-6 lg:space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4 sm:pb-6">
         <div>
@@ -200,7 +200,7 @@ export default function CoachingPage() {
 
         <TabsContent value="overview" className="space-y-6 mt-4">
           {/* KPI Summary */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <KPICard
               title="Total Conversations"
               value={performance?.total_conversations ?? 0}

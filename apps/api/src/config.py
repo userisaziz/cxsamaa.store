@@ -22,8 +22,15 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 30
 
     # Storage
-    storage_backend: str = "local"
+    storage_backend: str = "local"  # "local" or "r2"
     local_upload_dir: str = "./uploads"
+
+    # Cloudflare R2 (when STORAGE_BACKEND=r2)
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = "samaa-audio"
+    r2_public_url: str = ""  # Optional: public bucket URL for direct access
 
     # NVIDIA NIM
     nvidia_api_key: str = ""
