@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 _silero_vad_model: Optional[tuple] = None
 _silero_vad_utils: Optional[tuple] = None
 
-
 def _get_silero_vad_model():
     """Get or initialize Silero VAD model (lazy loading)."""
     global _silero_vad_model, _silero_vad_utils
@@ -174,3 +173,48 @@ def extract_speech_regions(audio_bytes: bytes, speech_segments: list[dict]) -> b
         return audio_bytes
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+def vad_filter_audio(audio_bytes: bytes) -> tuple[bytes, list[dict]]:
+    """Combined VAD filter: detect speech, extract regions, return filtered audio + segments.
+
+    This is the primary entry point for transcription-time VAD filtering.
+    It chains detect_speech_segments() → extract_speech_regions() and returns
+    both the silence-stripped audio and the speech segment list (needed for
+    timestamp remapping back to the original timeline).
+
+    Args:
+        audio_bytes: Raw audio data (16 kHz mono PCM WAV)
+
+    Returns:
+        (filtered_audio_bytes, speech_segments)
+        If VAD is disabled, fails, or finds no speech, returns (original_audio, []).
+    """
+    if not settings.vad_use_silero or not settings.vad_filter_before_stt:
+        return audio_bytes, []
+
+    speech_segments = detect_speech_segments(audio_bytes)
+
+    if not speech_segments:
+        logger.info("VAD: no speech segments detected — using original audio")
+        return audio_bytes, []
+
+    filtered = extract_speech_regions(audio_bytes, speech_segments)
+
+    # Compute compression metrics
+    original_size = len(audio_bytes)
+    filtered_size = len(filtered)
+    speech_seconds = sum(s["end"] - s["start"] for s in speech_segments)
+
+    if original_size > 0:
+        reduction_pct = (1 - filtered_size / original_size) * 100
+        logger.info(
+            "VAD filter: %d segments, %.1fs speech, size %.1fMB → %.1fMB (%.0f%% reduction)",
+            len(speech_segments),
+            speech_seconds,
+            original_size / (1024 * 1024),
+            filtered_size / (1024 * 1024),
+            reduction_pct,
+        )
+
+    return filtered, speech_segments

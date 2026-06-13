@@ -1,6 +1,6 @@
-"""Unit tests for transcription chunking and word deduplication."""
+"""Unit tests for transcription chunking, word deduplication, and VAD timestamp remapping."""
 import pytest
-from src.workers.transcription import _deduplicate_words
+from src.workers.transcription import _deduplicate_words, _remap_timestamps, _apply_vad_filter
 
 
 class TestWordDeduplication:
@@ -124,3 +124,173 @@ class TestWordDeduplication:
         # "price" should have confidence 0.92 (higher from chunk 1)
         assert result[1]["word"] == "price"
         assert result[1]["confidence"] == 0.92
+
+
+class TestVADTimestampRemapping:
+    """Test suite for _remap_timestamps — VAD filtered → original timeline."""
+
+    def test_no_speech_segments_passthrough(self):
+        """Empty speech segments returns timestamps unchanged."""
+        segments = [{"start": 1.0, "end": 5.0, "text": "hello"}]
+        words = [{"word": "hello", "start": 1.0, "end": 1.5, "confidence": 0.9}]
+        r_segs, r_words = _remap_timestamps(segments, words, [])
+        assert r_segs == segments
+        assert r_words == words
+
+    def test_single_speech_segment_no_silence(self):
+        """Single segment covering full audio — timestamps unchanged."""
+        speech = [{"start": 0.0, "end": 30.0}]
+        segments = [{"start": 5.0, "end": 10.0, "text": "test"}]
+        words = [{"word": "test", "start": 5.0, "end": 5.5, "confidence": 0.9}]
+        r_segs, r_words = _remap_timestamps(segments, words, speech)
+        assert r_segs[0]["start"] == pytest.approx(5.0)
+        assert r_segs[0]["end"] == pytest.approx(10.0)
+        assert r_words[0]["start"] == pytest.approx(5.0)
+
+    def test_two_segments_with_silence_gap(self):
+        """Two speech segments with a 5s silence gap — timestamps remap correctly.
+
+        Original timeline:  [speech 0-10] [silence 10-15] [speech 15-25]
+        Filtered timeline:  [speech 0-10] [speech 10-20]  (20s total)
+
+        STT sees word at filtered t=14 → should map to original t=19.
+        """
+        speech = [
+            {"start": 0.0, "end": 10.0},   # 10s speech
+            {"start": 15.0, "end": 25.0},   # 10s speech (after 5s silence)
+        ]
+        # STT output from filtered audio (20s total)
+        segments = [{"start": 14.0, "end": 16.0, "text": "word_in_second_segment"}]
+        words = [{"word": "word_in_second_segment", "start": 14.0, "end": 15.0, "confidence": 0.9}]
+
+        r_segs, r_words = _remap_timestamps(segments, words, speech)
+
+        # filtered t=14 → second segment, offset = 14 - 10 = 4 → original = 15 + 4 = 19
+        assert r_segs[0]["start"] == pytest.approx(19.0)
+        # filtered t=16 → second segment, offset = 16 - 10 = 6 → original = 15 + 6 = 21
+        assert r_segs[0]["end"] == pytest.approx(21.0)
+        # Word: filtered t=14 → original 19.0
+        assert r_words[0]["start"] == pytest.approx(19.0)
+
+    def test_three_segments_two_gaps(self):
+        """Three speech segments with two silence gaps."""
+        speech = [
+            {"start": 0.0, "end": 5.0},    # 5s speech
+            {"start": 10.0, "end": 20.0},   # 10s speech (5s gap)
+            {"start": 30.0, "end": 40.0},   # 10s speech (10s gap)
+        ]
+        # Total filtered duration: 5 + 10 + 10 = 25s
+        # Word at filtered t=20 (in 3rd segment) → original = 30 + (20-15) = 35
+        segments = [{"start": 20.0, "end": 22.0, "text": "late_word"}]
+        words = []
+
+        r_segs, _ = _remap_timestamps(segments, words, speech)
+        assert r_segs[0]["start"] == pytest.approx(35.0)
+        assert r_segs[0]["end"] == pytest.approx(37.0)
+
+    def test_timestamp_at_segment_boundary(self):
+        """Timestamp exactly at the boundary between two speech segments."""
+        speech = [
+            {"start": 0.0, "end": 10.0},
+            {"start": 15.0, "end": 25.0},
+        ]
+        # filtered t=10 is exactly at end of first / start of second segment
+        segments = [{"start": 10.0, "end": 12.0, "text": "boundary"}]
+        words = []
+
+        r_segs, _ = _remap_timestamps(segments, words, speech)
+        # t=10 → second segment start: 15 + (10-10) = 15
+        assert r_segs[0]["start"] == pytest.approx(15.0)
+
+    def test_timestamp_beyond_end_clamps(self):
+        """Timestamp beyond filtered duration clamps to last segment end.
+
+        When both start and end clamp to the same value, the segment collapses
+        and is filtered out (start == end means zero-width).
+        """
+        speech = [{"start": 5.0, "end": 15.0}]
+        # filtered duration = 10s, but STT returns t=12 (beyond end)
+        segments = [{"start": 8.0, "end": 12.0, "text": "overflow"}]
+        words = []
+
+        r_segs, _ = _remap_timestamps(segments, words, speech)
+        # start=8 maps to 5+(8-0)=13, end=12 clamps to 15
+        assert len(r_segs) == 1
+        assert r_segs[0]["start"] == pytest.approx(13.0)
+        assert r_segs[0]["end"] == pytest.approx(15.0)
+
+    def test_timestamp_before_start_clamps(self):
+        """Negative or zero timestamp clamps to first segment start."""
+        speech = [{"start": 5.0, "end": 15.0}]
+        segments = [{"start": -0.5, "end": 2.0, "text": "early"}]
+        words = []
+
+        r_segs, _ = _remap_timestamps(segments, words, speech)
+        # Clamps to first segment start = 5.0
+        assert r_segs[0]["start"] == pytest.approx(5.0)
+
+    def test_preserves_extra_segment_fields(self):
+        """Extra fields in segment/word dicts are preserved through remapping."""
+        speech = [{"start": 0.0, "end": 10.0}]
+        segments = [{"start": 5.0, "end": 8.0, "text": "hello", "speaker": "SPEAKER_00"}]
+        words = [{"word": "hello", "start": 5.0, "end": 5.5, "confidence": 0.95, "speaker": "SPEAKER_00"}]
+
+        r_segs, r_words = _remap_timestamps(segments, words, speech)
+        assert r_segs[0]["text"] == "hello"
+        assert r_segs[0]["speaker"] == "SPEAKER_00"
+        assert r_words[0]["confidence"] == 0.95
+        assert r_words[0]["speaker"] == "SPEAKER_00"
+
+    def test_collapsed_segments_filtered(self):
+        """Segments where start >= end after remapping are filtered out."""
+        speech = [{"start": 0.0, "end": 10.0}]
+        # This segment collapses to zero width after remap (edge case)
+        segments = [{"start": 15.0, "end": 15.0, "text": "collapsed"}]
+        words = []
+
+        r_segs, _ = _remap_timestamps(segments, words, speech)
+        assert len(r_segs) == 0
+
+
+class TestApplyVADFilter:
+    """Test suite for _apply_vad_filter wrapper."""
+
+    def test_vad_disabled_returns_original(self):
+        """When VAD is disabled, returns original audio unchanged."""
+        from unittest.mock import patch
+        mock_audio = b"\x00" * 1000
+
+        with patch("src.workers.transcription.settings") as mock_settings:
+            mock_settings.vad_use_silero = False
+            mock_settings.vad_filter_before_stt = True
+            result_audio, result_segments = _apply_vad_filter(mock_audio)
+
+        assert result_audio == mock_audio
+        assert result_segments == []
+
+    def test_vad_filter_disabled_returns_original(self):
+        """When vad_filter_before_stt is False, returns original audio."""
+        from unittest.mock import patch
+        mock_audio = b"\x00" * 1000
+
+        with patch("src.workers.transcription.settings") as mock_settings:
+            mock_settings.vad_use_silero = True
+            mock_settings.vad_filter_before_stt = False
+            result_audio, result_segments = _apply_vad_filter(mock_audio)
+
+        assert result_audio == mock_audio
+        assert result_segments == []
+
+    def test_vad_import_failure_graceful_fallback(self):
+        """When torch/torchaudio not installed, falls back to original audio."""
+        from unittest.mock import patch
+        mock_audio = b"\x00" * 1000
+
+        with patch("src.workers.transcription.settings") as mock_settings:
+            mock_settings.vad_use_silero = True
+            mock_settings.vad_filter_before_stt = True
+            with patch.dict("sys.modules", {"src.ai.vad": None}):
+                result_audio, result_segments = _apply_vad_filter(mock_audio)
+
+        assert result_audio == mock_audio
+        assert result_segments == []

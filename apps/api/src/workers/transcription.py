@@ -24,6 +24,100 @@ from src.workers.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# VAD integration (lazy imports — torch/torchaudio may not be installed)
+# ---------------------------------------------------------------------------
+
+def _apply_vad_filter(audio_bytes: bytes) -> tuple[bytes, list[dict]]:
+    """Apply VAD silence filtering to audio bytes.
+
+    Wraps vad_filter_audio with lazy import and graceful fallback.
+    Returns (filtered_audio, speech_segments) or (original_audio, []) on failure.
+    """
+    if not settings.vad_use_silero or not settings.vad_filter_before_stt:
+        return audio_bytes, []
+
+    try:
+        from src.ai.vad import vad_filter_audio
+        return vad_filter_audio(audio_bytes)
+    except ImportError:
+        logger.warning("VAD dependencies (torch/torchaudio) not available — skipping VAD filter")
+        return audio_bytes, []
+    except Exception as exc:
+        logger.warning("VAD filter failed (%s) — using original audio", exc)
+        return audio_bytes, []
+
+
+def _remap_timestamps(
+    segments: list[dict],
+    words: list[dict],
+    speech_segments: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Remap STT timestamps from VAD-filtered audio back to original timeline.
+
+    After VAD strips silence, STT returns timestamps relative to the compressed
+    (speech-only) audio. This function maps them back to the original chunk
+    timeline using the speech segment boundaries.
+
+    Algorithm:
+        For each STT timestamp t, find the speech segment [s_i.start, s_i.end]
+        where the cumulative filtered position contains t. Then:
+            original_time = s_i.start + (t - cumulative_before_i)
+
+    Args:
+        segments: STT segment dicts with start/end keys
+        words: STT word dicts with start/end keys
+        speech_segments: VAD speech segments in original timeline (seconds)
+
+    Returns:
+        (remapped_segments, remapped_words)
+    """
+    if not speech_segments:
+        return segments, words
+
+    # Build cumulative mapping: filtered_position → original_position
+    # cumulative[i] = total speech seconds before segment i
+    cumulative = [0.0]
+    for seg in speech_segments:
+        cumulative.append(cumulative[-1] + (seg["end"] - seg["start"]))
+    total_filtered_duration = cumulative[-1]
+
+    def remap(t: float) -> float:
+        """Map a single timestamp from filtered → original timeline."""
+        if t <= 0:
+            return speech_segments[0]["start"] if speech_segments else t
+        if t >= total_filtered_duration:
+            return speech_segments[-1]["end"] if speech_segments else t
+
+        # Binary-style search: find which speech segment contains this filtered time
+        for i, seg in enumerate(speech_segments):
+            seg_duration = seg["end"] - seg["start"]
+            if cumulative[i] + seg_duration > t:
+                offset_in_seg = t - cumulative[i]
+                return seg["start"] + offset_in_seg
+
+        # Fallback: clamp to last segment end
+        return speech_segments[-1]["end"]
+
+    remapped_segments = []
+    for seg in segments:
+        new_seg = dict(seg)
+        new_seg["start"] = remap(seg["start"])
+        new_seg["end"] = remap(seg["end"])
+        if new_seg["start"] < new_seg["end"]:
+            remapped_segments.append(new_seg)
+
+    remapped_words = []
+    for word in words:
+        new_word = dict(word)
+        new_word["start"] = remap(word["start"])
+        new_word["end"] = remap(word["end"])
+        if new_word["start"] < new_word["end"]:
+            remapped_words.append(new_word)
+
+    return remapped_segments, remapped_words
+
 # Module-level engine — reused across task invocations in the same worker process.
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -75,7 +169,7 @@ def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="transcribe_audio")
 def transcribe_audio_task(self, recording_id: str) -> str:
-    """Transcribe preprocessed audio using NVIDIA Parakeet STT.
+    """Transcribe preprocessed audio using configured STT provider (Groq Whisper or NVIDIA Riva).
 
     Args:
         recording_id: The recording to transcribe
@@ -108,10 +202,30 @@ def transcribe_audio_task(self, recording_id: str) -> str:
         max_chunk_size = settings.max_audio_chunk_bytes  # from settings
 
         if len(audio_data) <= max_chunk_size and duration_ms <= chunk_duration_ms:
+            # File is small enough and short enough — single-shot transcription
+            # Apply VAD filter to strip silence before STT
+            speech_segments = []
+            if settings.vad_filter_before_stt:
+                audio_data, speech_segments = _apply_vad_filter(audio_data)
+
             result = transcribe_audio(audio_data)
             segments = result.get("segments", [])
             words = result.get("words", [])
+
+            # Remap timestamps if VAD was applied
+            if speech_segments:
+                segments, words = _remap_timestamps(segments, words, speech_segments)
         else:
+            # File too large or too long — chunk for STT provider limits
+            # (Groq Whisper has 25 MB file limit)
+            logger.info(
+                "[%s] Audio needs chunking: %.1f MB, %.1f min (limit: %d MB, %d min)",
+                recording_id,
+                len(audio_data) / (1024 * 1024),
+                duration_ms / 60000,
+                max_chunk_size // (1024 * 1024),
+                chunk_duration_ms // 60000,
+            )
             segments, words = _transcribe_in_chunks_with_overlap(
                 audio_data, recording_id, chunk_duration_ms, overlap_ms
             )
@@ -187,7 +301,8 @@ def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str)
     """Transcribe a single audio chunk. Idempotent with acks_late.
 
     Downloads only its own chunk file (~28MB for 15-min WAV) from storage,
-    not the full recording.
+    not the full recording. Applies VAD filtering to strip silence before
+    sending to the STT API, then remaps timestamps back to original timeline.
 
     Returns a dict (JSON-serializable) — never raises past max_retries,
     returns a failure sentinel instead to prevent chord errors.
@@ -200,9 +315,27 @@ def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str)
         chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
         chunk_data = _download_audio_sync(storage, chunk_key)
 
+        # Apply VAD filter: strip silence before STT (saves 40-60% API cost)
+        speech_segments = []
+        if settings.vad_filter_before_stt:
+            filtered_data, speech_segments = _apply_vad_filter(chunk_data)
+            if speech_segments:
+                logger.info(
+                    "[%s] Chunk %d VAD: %.1fMB → %.1fMB (%d speech segments)",
+                    recording_id, chunk_index,
+                    len(chunk_data) / (1024 * 1024),
+                    len(filtered_data) / (1024 * 1024),
+                    len(speech_segments),
+                )
+                chunk_data = filtered_data
+
         result = transcribe_audio(chunk_data)
         segments = result.get("segments", [])
         words = result.get("words", [])
+
+        # Remap STT timestamps from VAD-filtered → original chunk timeline
+        if speech_segments:
+            segments, words = _remap_timestamps(segments, words, speech_segments)
 
         logger.info(
             "[%s] Chunk %d: %d segments, %d words",
@@ -349,9 +482,20 @@ def _transcribe_in_chunks_with_overlap(
             chunk_end_ms / 1000,
         )
 
+        # Apply VAD filter per chunk to strip silence before STT
+        speech_segments = []
+        if settings.vad_filter_before_stt:
+            chunk_bytes, speech_segments = _apply_vad_filter(chunk_bytes)
+
         result = transcribe_audio(chunk_bytes)
         chunk_segments = result.get("segments", [])
         chunk_words = result.get("words", [])
+
+        # Remap timestamps from VAD-filtered → original chunk timeline
+        if speech_segments:
+            chunk_segments, chunk_words = _remap_timestamps(
+                chunk_segments, chunk_words, speech_segments
+            )
 
         # Adjust timestamps by chunk offset
         offset_seconds = chunk_start_ms / 1000.0

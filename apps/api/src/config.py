@@ -41,6 +41,20 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
+    # Groq STT (Whisper Large v3)
+    stt_provider: str = "groq"  # "groq" or "riva"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_stt_model: str = "whisper-large-v3"
+    groq_stt_language: str = ""  # Empty = auto-detect; or set e.g. "en", "hi", "ar"
+
+    # DeepSeek LLM (V4)
+    llm_provider: str = "deepseek"  # "deepseek" or "nvidia"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_llm_model: str = "deepseek-v4-flash"  # or "deepseek-v4-pro"
+    deepseek_timeout: int = 120
+
     # Pyannote.audio (Local Diarization)
     diarization_use_pyannote: bool = True  # Enable pyannote as primary diarizer
     pyannote_hf_token: str = ""  # HuggingFace token for gated pyannote models
@@ -52,11 +66,15 @@ class Settings(BaseSettings):
     vad_threshold: float = 0.5  # Speech probability threshold (0.0-1.0)
     vad_min_speech_duration_ms: int = 250  # Minimum speech segment duration
     vad_min_silence_duration_ms: int = 500  # Minimum silence to mark boundary
+    vad_filter_before_stt: bool = True  # Strip silence from chunks before sending to STT (saves 40-60% cost)
+    vad_min_chunk_seconds: float = 3.0  # Skip VAD filtering for chunks shorter than this (not worth the overhead)
 
     # Audio Chunking for Long Recordings
-    audio_chunk_duration_minutes: int = 15  # Process long audio in 15-min chunks
+    # Groq Whisper has a 25 MB file limit — keep chunks well under that.
+    # 10 min of 16 kHz mono WAV ≈ 19.2 MB (safe for Groq)
+    audio_chunk_duration_minutes: int = 10  # 10-minute chunks (safe for Groq 25 MB limit)
     audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
-    max_audio_chunk_bytes: int = 50 * 1024 * 1024  # 50MB max per chunk
+    max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk (Groq limit)
 
     # Sortformer Diarization (Future - NVIDIA)
     diarization_use_sortformer: bool = False  # Enable when NVIDIA provides endpoint
