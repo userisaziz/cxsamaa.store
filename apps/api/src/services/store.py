@@ -94,15 +94,31 @@ async def get_store_metrics(db: AsyncSession, store_id: str) -> StoreMetricsResp
     if sp_ids:
         rec_ids_q = select(Recording.id).where(Recording.salesperson_id.in_(sp_ids))
 
-        # Avg confidence as proxy for performance score
-        avg_result = await db.execute(
-            select(func.avg(ConversationAnalysis.confidence)).join(Conversation).where(
+        # Avg performance score from scores JSONB
+        scores_result = await db.execute(
+            select(ConversationAnalysis.scores).join(Conversation).where(
                 Conversation.recording_id.in_(rec_ids_q),
-                ConversationAnalysis.confidence.isnot(None),
+                ConversationAnalysis.scores.isnot(None),
             )
         )
-        avg_val = avg_result.scalar()
-        avg_score = round(float(avg_val), 1) if avg_val else None
+        scores_list = [row[0] for row in scores_result.all() if row[0]]
+        
+        if scores_list:
+            overall_scores = []
+            for s in scores_list:
+                if isinstance(s, dict):
+                    # Collect non-None score values
+                    score_values = []
+                    for key in ["greeting_score", "discovery_score", "product_knowledge_score", "objection_handling_score", "closing_score"]:
+                        val = s.get(key)
+                        if val is not None:
+                            score_values.append(val)
+                    if score_values:
+                        overall = sum(score_values) / len(score_values)
+                        if overall > 0:
+                            overall_scores.append(overall)
+            if overall_scores:
+                avg_score = round(sum(overall_scores) / len(overall_scores), 1)
 
         # Conversion rate
         if total_conversations > 0:

@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Store,
   Users,
-  Mic,
   LogOut,
   Headphones,
   GraduationCap,
@@ -23,6 +22,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   roles?: string[];
+  hidden?: boolean; // Hide from navigation
 }
 
 const navItems: NavItem[] = [
@@ -60,16 +60,12 @@ const navItems: NavItem[] = [
     href: "/conversations",
     icon: MessageSquare,
   },
-  {
-    label: "Recordings",
-    href: "/recordings",
-    icon: Mic,
-  },
-  {
-    label: "Search",
-    href: "/search",
-    icon: Search,
-  },
+  // TODO: Uncomment when search feature is implemented
+  // {
+  //   label: "Search",
+  //   href: "/search",
+  //   icon: Search,
+  // },
   {
     label: "Coaching",
     href: "/coaching",
@@ -90,7 +86,7 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
 
   const filteredNav = navItems.filter(
-    (item) => !item.roles || (user && item.roles.includes(user.role)),
+    (item) => !item.hidden && (!item.roles || (user && item.roles.includes(user.role))),
   );
 
   function handleLogout() {

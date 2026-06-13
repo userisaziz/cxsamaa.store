@@ -176,6 +176,76 @@
     }
   }
 
+  /* Custom scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.75 0 0 / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.65 0 0 / 0.5);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox scrollbar styling */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.75 0 0 / 0.3) transparent;
+  }
+
+  /* Funnel chart entrance animations */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Respect user's motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes slideIn {
+      from,
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+    @keyframes fadeIn {
+      from,
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

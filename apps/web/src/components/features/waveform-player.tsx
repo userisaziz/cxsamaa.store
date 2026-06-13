@@ -18,6 +18,10 @@ export interface WaveformPlayerHandle {
 
 interface WaveformPlayerProps {
   recordingId: string;
+  /** When provided, loads only the conversation audio segment. */
+  conversationId?: string;
+  /** Compact variant for use in cards and drawers. */
+  compact?: boolean;
   onTimeUpdate?: (currentTime: number) => void;
 }
 
@@ -28,7 +32,7 @@ function formatTime(seconds: number): string {
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerProps>(
-  function WaveformPlayer({ recordingId, onTimeUpdate }, ref) {
+  function WaveformPlayer({ recordingId, conversationId, compact, onTimeUpdate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const wavesurferRef = useRef<WaveSurfer | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -46,9 +50,16 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
       },
     }));
 
+    // Build the audio URL
+    const audioUrl = conversationId
+      ? `${API_URL}/conversations/${conversationId}/audio`
+      : `${API_URL}/recordings/${recordingId}/audio`;
+
     // Initialize wavesurfer
     useEffect(() => {
       if (!containerRef.current) return;
+
+      const height = compact ? 40 : 80;
 
       const ws = WaveSurfer.create({
         container: containerRef.current,
@@ -59,7 +70,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
         barWidth: 2,
         barGap: 1.5,
         barRadius: 2,
-        height: 80,
+        height,
         normalize: true,
         backend: "WebAudio",
       });
@@ -89,7 +100,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
 
       // Fetch audio with auth header, then load as blob
       const token = localStorage.getItem("access_token");
-      fetch(`${API_URL}/recordings/${recordingId}/audio`, {
+      fetch(audioUrl, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
@@ -104,7 +115,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
         wavesurferRef.current = null;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [recordingId]);
+    }, [audioUrl]);
 
     const togglePlayPause = useCallback(() => {
       wavesurferRef.current?.playPause();
@@ -112,7 +123,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
 
     if (error) {
       return (
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-steel">
+        <div className={`flex items-center gap-3 rounded-xl border border-border bg-surface px-4 text-sm text-steel ${compact ? "py-2" : "py-3"}`}>
           <svg className="h-4 w-4 shrink-0 text-brand-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
@@ -123,14 +134,16 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
       );
     }
 
+    const btnSize = compact ? "h-8 w-8" : "h-10 w-10";
+
     return (
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-4">
+      <div className={`rounded-xl border border-border bg-card ${compact ? "p-2.5" : "p-4"}`}>
+        <div className={`flex items-center ${compact ? "gap-2.5" : "gap-4"}`}>
           {/* Play / Pause button */}
           <button
             onClick={togglePlayPause}
             disabled={!isReady}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+            className={`flex ${btnSize} shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40`}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (

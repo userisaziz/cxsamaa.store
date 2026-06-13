@@ -131,9 +131,9 @@ export default function RecordingsPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4 sm:pb-6">
         <div>
-          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Audio Sources</h1>
+          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Interactions</h1>
           <p className="mt-1 text-sm text-steel">
-            <span className="font-mono">{data?.total ?? 0}</span> uploaded audio files · <Link href="/conversations" className="text-brand-green-deep hover:underline font-medium">View all conversations →</Link>
+            <span className="font-mono">{data?.total ?? 0}</span> interactions · <Link href="/conversations" className="text-brand-green-deep hover:underline font-medium">View all conversations →</Link>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -200,12 +200,12 @@ export default function RecordingsPage() {
         </CardContent>
       </Card>
 
-      {/* Recordings Table */}
+      {/* Interactions Table */}
       <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Mic className="h-4 w-4 text-steel" />
-            Audio Recordings
+            Interactions
           </CardTitle>
         </CardHeader>
         <CardContent>

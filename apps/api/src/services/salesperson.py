@@ -88,14 +88,44 @@ async def get_salesperson_performance(
     scores_list = [row[0] for row in score_result.all() if row[0]]
 
     if scores_list:
-        avg_greeting = sum(s.get("greeting_score", 0) for s in scores_list) / len(scores_list)
-        avg_discovery = sum(s.get("discovery_score", 0) for s in scores_list) / len(scores_list)
-        avg_pk = sum(s.get("product_knowledge_score", 0) for s in scores_list) / len(scores_list)
-        avg_oh = sum(s.get("objection_handling_score", 0) for s in scores_list) / len(scores_list)
-        avg_closing = sum(s.get("closing_score", 0) for s in scores_list) / len(scores_list)
-        avg_overall = (avg_greeting + avg_discovery + avg_pk + avg_oh + avg_closing) / 5
+        # Collect non-None score values for each dimension
+        greeting_scores = [s.get("greeting_score") for s in scores_list if s.get("greeting_score") is not None]
+        discovery_scores = [s.get("discovery_score") for s in scores_list if s.get("discovery_score") is not None]
+        pk_scores = [s.get("product_knowledge_score") for s in scores_list if s.get("product_knowledge_score") is not None]
+        oh_scores = [s.get("objection_handling_score") for s in scores_list if s.get("objection_handling_score") is not None]
+        closing_scores = [s.get("closing_score") for s in scores_list if s.get("closing_score") is not None]
+        
+        avg_greeting = sum(greeting_scores) / len(greeting_scores) if greeting_scores else None
+        avg_discovery = sum(discovery_scores) / len(discovery_scores) if discovery_scores else None
+        avg_pk = sum(pk_scores) / len(pk_scores) if pk_scores else None
+        avg_oh = sum(oh_scores) / len(oh_scores) if oh_scores else None
+        avg_closing = sum(closing_scores) / len(closing_scores) if closing_scores else None
+        
+        # Calculate overall from non-None averages
+        valid_averages = [avg_greeting, avg_discovery, avg_pk, avg_oh, avg_closing]
+        valid_averages = [a for a in valid_averages if a is not None]
+        avg_overall = sum(valid_averages) / len(valid_averages) if valid_averages else None
     else:
         avg_greeting = avg_discovery = avg_pk = avg_oh = avg_closing = avg_overall = None
+
+    # Calculate conversion rate from conversation outcomes
+    if total_conversations > 0:
+        sales_count_result = await db.execute(
+            select(func.count()).select_from(ConversationAnalysis).where(
+                ConversationAnalysis.conversation_id.in_(
+                    select(Conversation.id).where(
+                        Conversation.recording_id.in_(
+                            select(Recording.id).where(Recording.salesperson_id == sid)
+                        )
+                    )
+                ),
+                ConversationAnalysis.outcome == "SALE_MADE",
+            )
+        )
+        sales_count = sales_count_result.scalar() or 0
+        conversion_rate = round(sales_count / total_conversations * 100, 1)
+    else:
+        conversion_rate = None
 
     return SalespersonPerformanceResponse(
         salesperson_id=salesperson_id,
@@ -107,4 +137,5 @@ async def get_salesperson_performance(
         avg_objection_handling_score=round(avg_oh, 1) if avg_oh is not None else None,
         avg_closing_score=round(avg_closing, 1) if avg_closing is not None else None,
         avg_overall_score=round(avg_overall, 1) if avg_overall is not None else None,
+        conversion_rate=conversion_rate,
     )

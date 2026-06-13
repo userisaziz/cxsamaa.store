@@ -31,7 +31,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
           Avg Score: <span className="font-mono text-ink">{item.avg_score?.toFixed(1) ?? "–"}</span>
         </p>
         <p className="text-xs text-steel">
-          Conversion: <span className="font-mono text-ink">{item.conversion_rate != null ? `${(item.conversion_rate * 100).toFixed(1)}%` : "–"}</span>
+          Conversion: <span className="font-mono text-ink">{item.conversion_rate != null ? `${item.conversion_rate.toFixed(1)}%` : "–"}</span>
         </p>
         <p className="text-xs text-steel">
           Conversations: <span className="font-mono text-ink">{item.total_conversations}</span>
@@ -50,7 +50,7 @@ export function StoreScatter({ data, title = "Store Comparison" }: StoreScatterP
     .map((d) => ({
       ...d,
       x: d.avg_score ?? 0,
-      y: (d.conversion_rate ?? 0) * 100,
+      y: (d.conversion_rate ?? 0),
       z: d.total_conversations,
     }));
 

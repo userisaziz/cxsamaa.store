@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import type {
@@ -29,7 +30,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   ArrowLeft,
   Users,
-  Mic,
+  MessageSquare,
   TrendingUp,
   Award,
   Target,
@@ -47,6 +48,8 @@ import {
 } from "recharts";
 import { ConversionGauge } from "@/components/charts/conversion-gauge";
 import { ScoreTrend } from "@/components/charts/score-trend";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import type { DateRange } from "@/components/date-range-filter";
 
 const SKILL_LABELS: Record<string, string> = {
   avg_greeting_score: "Greeting",
@@ -96,9 +99,21 @@ function getScoreBadgeClass(score: number | null | undefined): string {
   return "border-brand-error/20 text-destructive bg-destructive/10";
 }
 
+function getDateRange(days: number): DateRange {
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const from = new Date(now);
+  from.setDate(from.getDate() - days);
+  from.setHours(0, 0, 0, 0);
+  return { from, to };
+}
+
 export default function SalespersonDetailPage() {
   const params = useParams();
   const salespersonId = params.id as string;
+
+  // Date range state (default: last 30 days)
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange(30));
 
   // Fetch salesperson profile
   const { data: salesperson } = useQuery({
@@ -134,14 +149,16 @@ export default function SalespersonDetailPage() {
     enabled: !!salesperson?.store_id,
   });
 
-  // Fetch store analytics for trend data
-  const { data: storeAnalytics } = useQuery({
-    queryKey: ["salesperson-store-analytics", salesperson?.store_id],
+  // Fetch salesperson analytics with date range
+  const { data: analytics } = useQuery({
+    queryKey: ["analytics-overview", "salesperson", salespersonId, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: () =>
       api.get<AnalyticsOverviewResponse>(
-        `/analytics/overview?store_id=${salesperson?.store_id}`,
+        `/analytics/overview?salesperson_id=${salespersonId}` +
+        `&date_from=${dateRange.from.toISOString().split("T")[0]}` +
+        `&date_to=${dateRange.to.toISOString().split("T")[0]}`
       ),
-    enabled: !!salesperson?.store_id,
+    enabled: !!salespersonId,
   });
 
   const recordings = recordingsData?.items ?? [];
@@ -168,31 +185,36 @@ export default function SalespersonDetailPage() {
       />
 
       {/* Back button + Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <Link href={store ? `/store/${store.id}` : "/salespeople"}>
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back
-          </Button>
-        </Link>
-        <div className="flex-1 border-b border-border pb-4 sm:pb-6">
-          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">
-            {salesperson?.name || "Salesperson"}
-          </h1>
-          <p className="mt-1 text-sm text-steel">
-            {[salesperson?.role, salesperson?.shift, salesperson?.email]
-              .filter(Boolean)
-              .join(" · ") || "Sales team member"}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
+          <Link href={store ? `/store/${store.id}` : "/salespeople"}>
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Back
+            </Button>
+          </Link>
+          <div className="flex-1 border-b border-border pb-4 sm:pb-6">
+            <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">
+              {salesperson?.name || "Salesperson"}
+            </h1>
+            <p className="mt-1 text-sm text-steel">
+              {[salesperson?.role, salesperson?.shift, salesperson?.email]
+                .filter(Boolean)
+                .join(" · ") || "Sales team member"}
+            </p>
+          </div>
         </div>
-        {overallScore != null && (
-          <Badge
-            variant="outline"
-            className={`text-lg px-4 py-2 font-bold font-mono ${getScoreBadgeClass(overallScore)}`}
-          >
-            {overallScore.toFixed(0)} / 100
-          </Badge>
-        )}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          {overallScore != null && (
+            <Badge
+              variant="outline"
+              className={`text-lg px-4 py-2 font-bold font-mono ${getScoreBadgeClass(overallScore)}`}
+            >
+              {overallScore.toFixed(0)} / 100
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -200,26 +222,26 @@ export default function SalespersonDetailPage() {
         <KPICard
           title="Total Conversations"
           value={performance?.total_conversations ?? 0}
-          icon={Mic}
-          description="Analyzed interactions"
+          icon={MessageSquare}
+          description={performance?.total_conversations ? "Analyzed interactions" : "No conversations yet"}
         />
         <KPICard
           title="Avg Overall Score"
           value={overallScore != null ? overallScore.toFixed(1) : "—"}
           icon={Award}
-          description="Across all skills"
+          description={overallScore != null ? "Across all skills" : "No scores available"}
         />
         <KPICard
           title="Conversion Rate"
           value={conversionRate != null ? `${conversionRate.toFixed(0)}%` : "—"}
           icon={Target}
-          description="Sales conversion"
+          description={conversionRate != null ? "Sales conversion" : "No data yet"}
         />
         <KPICard
-          title="Recordings"
+          title="Interactions"
           value={recordingsData?.total ?? 0}
           icon={BarChart3}
-          description="Total uploads"
+          description={recordingsData?.total ? "Total uploads" : "No recordings uploaded"}
         />
       </div>
 
@@ -234,7 +256,24 @@ export default function SalespersonDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {performance ? (
+            {!performance ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Inbox className="h-10 w-10 text-stone/40 mb-3" />
+                <p className="text-sm font-medium text-steel">
+                  Performance data will appear once conversations are analyzed.
+                </p>
+              </div>
+            ) : performance.total_conversations === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Inbox className="h-10 w-10 text-stone/40 mb-3" />
+                <p className="text-sm font-medium text-steel">
+                  No conversations found for this salesperson
+                </p>
+                <p className="text-xs text-stone mt-2">
+                  Upload recordings to start tracking performance.
+                </p>
+              </div>
+            ) : (
               <div className="space-y-4">
                 {Object.entries(SKILL_LABELS).map(([key, label]) => {
                   const score = performance[
@@ -264,13 +303,6 @@ export default function SalespersonDetailPage() {
                     {overallScore != null ? overallScore.toFixed(1) : "—"}
                   </Badge>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Inbox className="h-10 w-10 text-stone/40 mb-3" />
-                <p className="text-sm text-steel">
-                  Performance data will appear once conversations are analyzed.
-                </p>
               </div>
             )}
           </CardContent>
@@ -323,25 +355,25 @@ export default function SalespersonDetailPage() {
       {/* Conversion Gauge + Score Trend */}
       <div className="grid gap-6 lg:grid-cols-2">
         <ConversionGauge
-          value={conversionRate != null ? conversionRate / 100 : null}
+          value={conversionRate ?? null}
           title="Conversion Rate"
           label={performance?.total_conversations ? `${performance.total_conversations} conversations` : undefined}
         />
         <ScoreTrend
-          data={storeAnalytics?.score_trend ?? []}
-          title="Score Trend (Store)"
+          data={analytics?.score_trend ?? []}
+          title="Score Trend"
         />
       </div>
 
-      {/* Recent Recordings */}
+      {/* Recent Interactions */}
       <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Mic className="h-4 w-4 text-steel" />
-              Recent Recordings
+              <MessageSquare className="h-4 w-4 text-steel" />
+              Recent Conversations
             </CardTitle>
-            <Link href={`/recordings?salesperson_id=${salespersonId}`}>
+            <Link href={`/conversations?salesperson_id=${salespersonId}`}>
               <Button variant="ghost" size="sm">
                 View all
                 <Eye className="ml-1 h-4 w-4" />
@@ -363,7 +395,11 @@ export default function SalespersonDetailPage() {
               </TableHeader>
               <TableBody>
                 {recordings.map((rec) => (
-                  <TableRow key={rec.id}>
+                  <TableRow 
+                    key={rec.id} 
+                    className="group cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => rec.status === "COMPLETED" && (window.location.href = `/recordings/${rec.id}`)}
+                  >
                     <TableCell className="text-steel font-mono text-[13px]">
                       {formatDate(rec.uploaded_at)}
                     </TableCell>

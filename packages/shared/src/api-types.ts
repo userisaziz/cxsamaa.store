@@ -198,11 +198,11 @@ export interface ConversationAnalysis {
 }
 
 export interface PerformanceScores {
-  greeting: number;
-  discovery: number;
-  product_knowledge: number;
-  objection_handling: number;
-  closing: number;
+  greeting_score: number;
+  discovery_score: number;
+  product_knowledge_score: number;
+  objection_handling_score: number;
+  closing_score: number;
 }
 
 // --- Metrics ---

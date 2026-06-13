@@ -27,11 +27,15 @@ async def _get_recording_ids_for_scope(
     db: AsyncSession,
     brand_id: str | None = None,
     store_id: str | None = None,
+    salesperson_id: str | None = None,
 ) -> list[uuid.UUID]:
-    """Get recording IDs scoped to a brand or store."""
+    """Get recording IDs scoped to a brand, store, or salesperson."""
     query = select(Recording.id)
 
-    if store_id:
+    if salesperson_id:
+        # Direct salesperson scope
+        query = query.where(Recording.salesperson_id == uuid.UUID(salesperson_id))
+    elif store_id:
         sp_ids_q = select(Salesperson.id).where(
             Salesperson.store_id == uuid.UUID(store_id)
         )
@@ -53,11 +57,12 @@ async def get_analytics_overview(
     db: AsyncSession,
     brand_id: str | None = None,
     store_id: str | None = None,
+    salesperson_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> AnalyticsOverviewResponse:
-    """Compute a full analytics overview for a brand or store."""
-    rec_ids = await _get_recording_ids_for_scope(db, brand_id, store_id)
+    """Compute a full analytics overview for a brand, store, or salesperson."""
+    rec_ids = await _get_recording_ids_for_scope(db, brand_id, store_id, salesperson_id)
 
     if not rec_ids:
         return AnalyticsOverviewResponse(
@@ -71,6 +76,9 @@ async def get_analytics_overview(
             score_trend=[],
             volume_trend=[],
             store_comparison=[],
+            total_conversations=0,
+            avg_confidence=None,
+            conversion_rate=None,
         )
 
     # --- Conversation IDs in scope ---
@@ -95,6 +103,7 @@ async def get_analytics_overview(
     objections_q = select(ConversationAnalysis.objections).where(
         ConversationAnalysis.conversation_id.in_(conv_ids_q),
         ConversationAnalysis.objections.isnot(None),
+        ConversationAnalysis.objections != func.jsonb_build_array(),  # JSONB empty array
     )
     objections_result = await db.execute(objections_q)
     objection_counter: Counter = Counter()
@@ -146,7 +155,10 @@ async def get_analytics_overview(
     score_trend: list[TrendPoint] = []
     volume_trend: list[TrendPoint] = []
 
-    if store_id:
+    if salesperson_id:
+        entity_id = uuid.UUID(salesperson_id)
+        entity_type = "SALESPERSON"
+    elif store_id:
         entity_id = uuid.UUID(store_id)
         entity_type = "STORE"
     elif brand_id:
@@ -188,26 +200,64 @@ async def get_analytics_overview(
         fallback_q = select(
             func.date(Conversation.created_at).label("day"),
             func.count(Conversation.id),
-            func.avg(ConversationAnalysis.confidence),
-        ).join(
-            ConversationAnalysis,
-            ConversationAnalysis.conversation_id == Conversation.id,
-            isouter=True,
         ).where(
             Conversation.recording_id.in_(rec_ids),
         ).group_by(func.date(Conversation.created_at)).order_by(
             func.date(Conversation.created_at)
         )
         fallback_result = await db.execute(fallback_q)
-        for day, conv_count, avg_conf in fallback_result.all():
+        volume_rows = fallback_result.all()
+        
+        # Get scores separately (need to join ConversationAnalysis)
+        scores_q = select(
+            func.date(Conversation.created_at).label("day"),
+            ConversationAnalysis.scores,
+        ).join(
+            ConversationAnalysis,
+            ConversationAnalysis.conversation_id == Conversation.id,
+        ).where(
+            Conversation.recording_id.in_(rec_ids),
+            ConversationAnalysis.scores.isnot(None),
+        ).order_by(func.date(Conversation.created_at))
+        scores_result = await db.execute(scores_q)
+        
+        # Build day -> scores mapping
+        day_scores: dict = {}
+        for day, scores in scores_result.all():
+            if day not in day_scores:
+                day_scores[day] = []
+            if isinstance(scores, dict):
+                day_scores[day].append(scores)
+        
+        for day, conv_count in volume_rows:
             if day:
                 volume_trend.append(TrendPoint(
                     date=str(day),
                     conversation_count=conv_count or 0,
                 ))
+                
+                # Calculate average overall score from scores JSONB
+                avg_score_val = None
+                if day in day_scores and day_scores[day]:
+                    overall_scores = []
+                    for s in day_scores[day]:
+                        if isinstance(s, dict):
+                            # Collect non-None score values
+                            score_values = []
+                            for key in ["greeting_score", "discovery_score", "product_knowledge_score", "objection_handling_score", "closing_score"]:
+                                val = s.get(key)
+                                if val is not None:
+                                    score_values.append(val)
+                            if score_values:
+                                overall = sum(score_values) / len(score_values)
+                                if overall > 0:
+                                    overall_scores.append(overall)
+                    if overall_scores:
+                        avg_score_val = sum(overall_scores) / len(overall_scores)
+                
                 score_trend.append(TrendPoint(
                     date=str(day),
-                    avg_score=round(float(avg_conf), 1) if avg_conf else None,
+                    avg_score=round(avg_score_val, 1) if avg_score_val else None,
                 ))
 
     # --- 5. Avg confidence + conversion rate ---
@@ -251,15 +301,31 @@ async def get_analytics_overview(
                 )
             ).scalar() or 0
 
-            # Avg confidence
-            store_avg_conf = (
-                await db.execute(
-                    select(func.avg(ConversationAnalysis.confidence)).where(
-                        ConversationAnalysis.conversation_id.in_(store_conv_ids_q),
-                        ConversationAnalysis.confidence.isnot(None),
-                    )
-                )
-            ).scalar()
+            # Avg performance score from scores JSONB
+            store_scores_q = select(ConversationAnalysis.scores).where(
+                ConversationAnalysis.conversation_id.in_(store_conv_ids_q),
+                ConversationAnalysis.scores.isnot(None),
+            )
+            store_scores_result = await db.execute(store_scores_q)
+            store_scores_list = [row[0] for row in store_scores_result.all() if row[0]]
+
+            avg_score_val = None
+            if store_scores_list:
+                overall_scores = []
+                for s in store_scores_list:
+                    if isinstance(s, dict):
+                        # Collect non-None score values
+                        score_values = []
+                        for key in ["greeting_score", "discovery_score", "product_knowledge_score", "objection_handling_score", "closing_score"]:
+                            val = s.get(key)
+                            if val is not None:
+                                score_values.append(val)
+                        if score_values:
+                            overall = sum(score_values) / len(score_values)
+                            if overall > 0:
+                                overall_scores.append(overall)
+                if overall_scores:
+                    avg_score_val = sum(overall_scores) / len(overall_scores)
 
             # Sales count
             store_sales = (
@@ -280,7 +346,7 @@ async def get_analytics_overview(
             store_comparison.append(StoreComparisonItem(
                 store_id=str(store.id),
                 store_name=store.name,
-                avg_score=round(float(store_avg_conf), 1) if store_avg_conf else None,
+                avg_score=round(avg_score_val, 1) if avg_score_val else None,
                 conversion_rate=store_conversion,
                 total_conversations=store_conv_count,
             ))
@@ -302,6 +368,8 @@ async def get_salespeople_comparison(
     db: AsyncSession,
     brand_id: str | None = None,
     store_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> AnalyticsSalespeopleResponse:
     """Get per-salesperson performance comparison."""
     sp_query = select(Salesperson)
@@ -326,6 +394,14 @@ async def get_salespeople_comparison(
         rec_ids_q = select(Recording.id).where(
             Recording.salesperson_id == sp.id
         )
+        
+        # Apply date filter to recordings if provided
+        if date_from:
+            rec_ids_q = rec_ids_q.where(Recording.created_at >= date_from)
+        if date_to:
+            # Include full end date
+            rec_ids_q = rec_ids_q.where(Recording.created_at <= date_to.replace(hour=23, minute=59, second=59))
+        
         conv_ids_q = select(Conversation.id).where(
             Conversation.recording_id.in_(rec_ids_q)
         )

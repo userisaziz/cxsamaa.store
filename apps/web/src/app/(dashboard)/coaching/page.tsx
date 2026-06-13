@@ -121,6 +121,16 @@ export default function CoachingPage() {
     enabled: !!activeSalesperson?.store_id,
   });
 
+  // Fetch salesperson-specific analytics for trend data
+  const { data: salespersonAnalytics } = useQuery({
+    queryKey: ["coaching-salesperson-analytics", activeSalespersonId],
+    queryFn: () =>
+      api.get<AnalyticsOverviewResponse>(
+        `/analytics/overview?salesperson_id=${activeSalespersonId}`,
+      ),
+    enabled: !!activeSalespersonId,
+  });
+
   // Build radar chart data
   const radarData = performance
     ? Object.entries(SKILL_LABELS).map(([key, label]) => ({
@@ -391,12 +401,12 @@ export default function CoachingPage() {
           {/* Historical Trend + Conversion Gauge */}
           <div className="grid gap-6 lg:grid-cols-2">
             <ScoreTrend
-              data={storeAnalytics?.score_trend ?? []}
-              title="Score Trend (Store)"
+              data={salespersonAnalytics?.score_trend ?? storeAnalytics?.score_trend ?? []}
+              title="Score Trend"
             />
             <ConversionGauge
               value={performance?.conversion_rate != null ? performance.conversion_rate / 100 : null}
-              title="Your Conversion Rate"
+              title="Conversion Rate"
               label={performance?.total_conversations ? `${performance.total_conversations} conversations` : undefined}
             />
           </div>

@@ -123,13 +123,19 @@ export function TranscriptViewer({
             key={seg.id}
             ref={isActiveTime ? activeSegmentRef : undefined}
             className={cn(
-              "flex gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent/50 cursor-pointer",
+              "flex gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent/50 cursor-pointer group",
               isActiveConversation && "bg-accent",
               isActiveTime && !isActiveConversation && "bg-brand-green-soft/60",
             )}
             onClick={() => onSegmentClick?.(seg)}
+            title={`Click to jump to ${formatTime(seg.start_time)}`}
           >
-            <span className="shrink-0 font-mono text-xs text-steel pt-0.5">
+            <span 
+              className={cn(
+                "shrink-0 font-mono text-xs pt-0.5 transition-colors",
+                "text-steel group-hover:text-brand-green-deep group-hover:underline"
+              )}
+            >
               {formatTime(seg.start_time)}
             </span>
             <span

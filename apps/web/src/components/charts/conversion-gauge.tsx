@@ -25,7 +25,8 @@ export function ConversionGauge({
   title = "Conversion Rate",
   label,
 }: ConversionGaugeProps) {
-  const pct = value != null ? Math.round(value * 100) : null;
+  // Auto-detect format: if value > 1, assume it's a percentage (0-100), otherwise it's a ratio (0-1)
+  const pct = value != null ? (value > 1 ? Math.round(value) : Math.round(value * 100)) : null;
   const hasData = pct != null;
 
   const gaugeData = hasData

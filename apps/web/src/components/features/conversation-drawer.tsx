@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { TranscriptViewer } from "./transcript-viewer";
+import { WaveformPlayer } from "./waveform-player";
 import { Brain, Target, AlertTriangle, CheckCircle, XCircle, Clock } from "lucide-react";
 
 const SPEAKER_COLORS: Record<string, string> = {
@@ -33,6 +34,7 @@ interface ConversationDrawerProps {
   conversation: Conversation | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  salespersonName?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -41,7 +43,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function ConversationDrawer({ conversation, open, onOpenChange }: ConversationDrawerProps) {
+export function ConversationDrawer({ conversation, open, onOpenChange, salespersonName }: ConversationDrawerProps) {
   const convId = conversation?.id;
 
   const { data: analysis } = useQuery({
@@ -81,6 +83,13 @@ export function ConversationDrawer({ conversation, open, onOpenChange }: Convers
             </SheetHeader>
 
             <div className="space-y-6">
+              {/* Conversation Audio Player */}
+              <WaveformPlayer
+                recordingId={conversation.recording_id}
+                conversationId={conversation.id}
+                compact
+              />
+
               {/* AI Summary */}
               {analysis?.summary && (
                 <div className="rounded-lg bg-muted/50 p-4 border border-border/50">
@@ -208,7 +217,7 @@ export function ConversationDrawer({ conversation, open, onOpenChange }: Convers
               <div className="space-y-3">
                 <h4 className="text-sm font-medium text-ink">Transcript</h4>
                 <div className="rounded-lg border border-hairline bg-canvas p-4">
-                  <TranscriptViewer segments={convSegments} />
+                  <TranscriptViewer segments={convSegments} salespersonName={salespersonName} />
                 </div>
               </div>
             </div>

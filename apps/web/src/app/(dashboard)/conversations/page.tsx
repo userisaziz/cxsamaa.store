@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/select";
 import { MessageSquare, ChevronLeft, ChevronRight, RefreshCw, Eye, Inbox } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const OUTCOMES = [
@@ -236,38 +235,49 @@ export default function ConversationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {conversations.map((conv) => (
-                    <TableRow key={conv.id}>
-                      <TableCell className="text-steel font-mono text-[13px]">
-                        {formatDateTime(conv.recorded_at)}
-                      </TableCell>
-                      <TableCell className="font-mono text-[13px] text-charcoal">
-                        {formatTimeRange(conv.start_time, conv.end_time)}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{formatDuration(conv.duration_seconds)}</TableCell>
-                      <TableCell className="text-steel font-mono text-sm">{conv.segment_count}</TableCell>
-                      <TableCell className="text-ink text-sm max-w-[200px] truncate">
-                        {conv.intent || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <OutcomeBadge outcome={conv.outcome} />
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {conv.confidence ? `${conv.confidence}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-steel text-sm max-w-[240px] truncate">
-                        {conv.summary || "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/recordings/${conv.recording_id}?conv=${conv.id}`}>
-                          <Button variant="ghost" size="sm">
+                  {conversations.map((conv) => {
+                    const recordingLink = `/recordings/${conv.recording_id}?conv=${conv.id}`;
+                    return (
+                      <TableRow 
+                        key={conv.id} 
+                        className="group cursor-pointer hover:bg-accent/50 transition-colors"
+                        onClick={() => {
+                          window.location.href = recordingLink;
+                        }}
+                      >
+                        <TableCell className="text-steel font-mono text-[13px]">
+                          {formatDateTime(conv.recorded_at)}
+                        </TableCell>
+                        <TableCell className="font-mono text-[13px] text-charcoal">
+                          {formatTimeRange(conv.start_time, conv.end_time)}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {formatDuration(conv.duration_seconds)}
+                        </TableCell>
+                        <TableCell className="text-steel font-mono text-sm">
+                          {conv.segment_count}
+                        </TableCell>
+                        <TableCell className="text-ink text-sm max-w-[200px] truncate">
+                          {conv.intent || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <OutcomeBadge outcome={conv.outcome} />
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {conv.confidence ? `${conv.confidence}%` : "—"}
+                        </TableCell>
+                        <TableCell className="text-steel text-sm max-w-[240px] truncate">
+                          {conv.summary || "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" className="opacity-70 group-hover:opacity-100 transition-opacity">
                             <Eye className="mr-1 h-4 w-4" />
                             View
                           </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               </div>

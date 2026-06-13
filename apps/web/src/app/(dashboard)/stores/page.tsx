@@ -60,7 +60,11 @@ export default function StoresPage() {
               </TableHeader>
               <TableBody>
                 {stores.map((store) => (
-                  <TableRow key={store.id}>
+                  <TableRow 
+                    key={store.id} 
+                    className="group cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => window.location.href = `/store/${store.id}`}
+                  >
                     <TableCell>
                       <Link
                         href={`/store/${store.id}`}

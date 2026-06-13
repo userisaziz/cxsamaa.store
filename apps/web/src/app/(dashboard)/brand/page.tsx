@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "@/lib/api-client";
 import type { Brand, Store as StoreType, Salesperson, SalespersonPerformance } from "@samaa/shared";
 import { KPICard } from "@/components/kpi-card";
@@ -17,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Store as StoreIcon, Users, Mic, TrendingUp, AlertTriangle, Inbox } from "lucide-react";
 import Link from "next/link";
 import type { AnalyticsOverviewResponse, AnalyticsSalespeopleResponse } from "@samaa/shared";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import type { DateRange } from "@/components/date-range-filter";
 import { OutcomeDonut } from "@/components/charts/outcome-donut";
 import { ConversionGauge } from "@/components/charts/conversion-gauge";
 import { ScoreTrend } from "@/components/charts/score-trend";
@@ -27,6 +30,14 @@ import { ObjectionTreemap } from "@/components/charts/objection-treemap";
 import { SkillHeatmap } from "@/components/charts/skill-heatmap";
 
 export default function BrandDashboardPage() {
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    const from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    from.setHours(0, 0, 0, 0);
+    return { from, to };
+  });
   const { data: stores } = useQuery({
     queryKey: ["stores"],
     queryFn: () => api.get<StoreType[]>("/stores"),
@@ -66,18 +77,22 @@ export default function BrandDashboardPage() {
   // Fetch analytics overview + salespeople comparison
   const brandId = stores?.[0]?.brand_id;
   const { data: analytics } = useQuery({
-    queryKey: ["analytics-overview", "brand", brandId],
+    queryKey: ["analytics-overview", "brand", brandId, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: () =>
       api.get<AnalyticsOverviewResponse>(
-        `/analytics/overview${brandId ? `?brand_id=${brandId}` : ""}`,
+        `/analytics/overview${brandId ? `?brand_id=${brandId}` +
+        `&date_from=${dateRange.from.toISOString().split("T")[0]}` +
+        `&date_to=${dateRange.to.toISOString().split("T")[0]}` : ""}`,
       ),
     enabled: !!brandId,
   });
   const { data: salespeopleComparison } = useQuery({
-    queryKey: ["analytics-salespeople", "brand", brandId],
+    queryKey: ["analytics-salespeople", "brand", brandId, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: () =>
       api.get<AnalyticsSalespeopleResponse>(
-        `/analytics/salespeople-comparison${brandId ? `?brand_id=${brandId}` : ""}`,
+        `/analytics/salespeople-comparison${brandId ? `?brand_id=${brandId}` +
+        `&date_from=${dateRange.from.toISOString().split("T")[0]}` +
+        `&date_to=${dateRange.to.toISOString().split("T")[0]}` : ""}`,
       ),
     enabled: !!brandId,
   });
@@ -114,9 +129,12 @@ export default function BrandDashboardPage() {
   return (
     <div className="space-y-6 lg:space-y-8 p-4 sm:p-6 lg:p-8">
       {/* Page Header */}
-      <div className="border-b border-border pb-4 sm:pb-6">
-        <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Brand Dashboard</h1>
-        <p className="mt-1 text-sm text-steel">Overview of your brand performance across all locations</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-border pb-4 sm:pb-6">
+        <div>
+          <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Brand Dashboard</h1>
+          <p className="mt-1 text-sm text-steel">Overview of your brand performance across all locations</p>
+        </div>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* KPI Cards */}
@@ -148,38 +166,34 @@ export default function BrandDashboardPage() {
       </div>
 
       {/* Analytics Charts */}
-      {(analytics || salespeopleComparison) && (
-        <>
-          {/* Row 1: Outcome Donut + Conversion Gauge */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <OutcomeDonut data={analytics?.outcome_distribution ?? []} />
-            <ConversionGauge
-              value={analytics?.conversion_rate ?? null}
-              label={`${analytics?.total_conversations ?? 0} conversations`}
-            />
-          </div>
+      <div className="space-y-4">
+        {/* Row 1: Outcome Donut + Conversion Gauge */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <OutcomeDonut data={analytics?.outcome_distribution ?? []} />
+          <ConversionGauge
+            value={analytics?.conversion_rate ?? null}
+            label={`${analytics?.total_conversations ?? 0} conversations`}
+          />
+        </div>
 
-          {/* Row 2: Score Trend + Volume Trend */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ScoreTrend data={analytics?.score_trend ?? []} />
-            <VolumeTrend data={analytics?.volume_trend ?? []} />
-          </div>
+        {/* Row 2: Score Trend + Volume Trend */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ScoreTrend data={analytics?.score_trend ?? []} />
+          <VolumeTrend data={analytics?.volume_trend ?? []} />
+        </div>
 
-          {/* Row 3: Sales Performance Bar */}
-          <PerformanceBar data={salespeopleComparison?.salespeople ?? []} />
+        {/* Row 3: Sales Performance Bar */}
+        <PerformanceBar data={salespeopleComparison?.salespeople ?? []} />
 
-          {/* Row 4: Store Scatter + Objection Treemap */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <StoreScatter data={analytics?.store_comparison ?? []} />
-            <ObjectionTreemap data={analytics?.top_objections ?? []} />
-          </div>
+        {/* Row 4: Store Scatter + Objection Treemap */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <StoreScatter data={analytics?.store_comparison ?? []} />
+          <ObjectionTreemap data={analytics?.top_objections ?? []} />
+        </div>
 
-          {/* Row 5: Team Skill Heatmap */}
-          {salespeopleComparison?.salespeople && salespeopleComparison.salespeople.length > 0 && (
-            <SkillHeatmap data={salespeopleComparison.salespeople} />
-          )}
-        </>
-      )}
+        {/* Row 5: Team Skill Heatmap */}
+        <SkillHeatmap data={salespeopleComparison?.salespeople ?? []} />
+      </div>
 
       {/* Store Ranking Table */}
       <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
@@ -210,7 +224,11 @@ export default function BrandDashboardPage() {
                   }))
                   .sort((a, b) => (b.agg.avgScore ?? 0) - (a.agg.avgScore ?? 0))
                   .map(({ store, agg }) => (
-                    <TableRow key={store.id}>
+                    <TableRow 
+                      key={store.id} 
+                      className="group cursor-pointer hover:bg-accent/50 transition-colors"
+                      onClick={() => window.location.href = `/store/${store.id}`}
+                    >
                       <TableCell>
                         <Link
                           href={`/store/${store.id}`}
