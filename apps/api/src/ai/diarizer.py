@@ -1,22 +1,33 @@
 """Speaker Diarization — pyannote.audio (primary) + NVIDIA NIM (fallback)."""
+from __future__ import annotations
+
 import io
 import logging
 import threading
+import typing
 from typing import Any, Optional
 
 from src.ai.nvidia_client import NVIDIAAPIError, nvidia_client
-from src.ai.pyannote_diarizer import PyannoteDiarizer
 from src.config import settings
+
+if typing.TYPE_CHECKING:
+    from src.ai.pyannote_diarizer import PyannoteDiarizer
 
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded pyannote diarizer (initialized on first use)
-_pyannote_diarizer: Optional[PyannoteDiarizer] = None
+_pyannote_diarizer: Optional[Any] = None
 _pyannote_lock = threading.Lock()  # Thread-safe initialization
 
 
-def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
-    """Get or initialize pyannote diarizer (lazy loading, thread-safe)."""
+def _get_pyannote_diarizer() -> Optional[Any]:
+    """Get or initialize pyannote diarizer (lazy loading, thread-safe).
+
+    Imports PyannoteDiarizer only when actually called — this prevents
+    torch/pyannote (~300 MB) from loading at module import time, which
+    is critical for 1 GB VMs where the Celery worker would otherwise
+    carry a dead torch process.
+    """
     global _pyannote_diarizer
     
     if _pyannote_diarizer is not None:
@@ -31,6 +42,7 @@ def _get_pyannote_diarizer() -> Optional[PyannoteDiarizer]:
     with _pyannote_lock:
         if _pyannote_diarizer is None:
             try:
+                from src.ai.pyannote_diarizer import PyannoteDiarizer
                 _pyannote_diarizer = PyannoteDiarizer(
                     model_name=settings.pyannote_model_name,
                     device=settings.pyannote_device if settings.pyannote_device else None,

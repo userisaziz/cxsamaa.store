@@ -246,11 +246,11 @@ export default function RecordingDetailPage() {
     analyses.forEach(analysis => {
       if (analysis.scores) {
         countWithScores++;
-        scoreTotals.greeting += analysis.scores.greeting ?? 0;
-        scoreTotals.discovery += analysis.scores.discovery ?? 0;
-        scoreTotals.product_knowledge += analysis.scores.product_knowledge ?? 0;
-        scoreTotals.objection_handling += analysis.scores.objection_handling ?? 0;
-        scoreTotals.closing += analysis.scores.closing ?? 0;
+        scoreTotals.greeting += analysis.scores.greeting_score ?? 0;
+        scoreTotals.discovery += analysis.scores.discovery_score ?? 0;
+        scoreTotals.product_knowledge += analysis.scores.product_knowledge_score ?? 0;
+        scoreTotals.objection_handling += analysis.scores.objection_handling_score ?? 0;
+        scoreTotals.closing += analysis.scores.closing_score ?? 0;
       }
     });
 

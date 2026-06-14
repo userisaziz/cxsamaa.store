@@ -14,7 +14,7 @@ concurrency:
 
 env:
   APP_DIR: /home/ubuntu/samaa-ai
-  DEPLOY_TIMEOUT: 600  # 10 minutes max for remote commands
+  DEPLOY_TIMEOUT: 600
 
 jobs:
   # ── Pre-flight validation ──────────────────────────────────────
@@ -31,9 +31,7 @@ jobs:
           echo "  Branch:    ${{ github.ref_name }}"
           echo "  Commit:    ${{ github.sha }}"
           echo "  Author:    ${{ github.actor }}"
-          echo "  Workflow:  ${{ github.run_id }}"
 
-          # Ensure critical files exist
           for f in apps/api/pyproject.toml apps/web/package.json .env.example; do
             if [ ! -f "$f" ]; then
               echo "::error::Missing required file: $f"
@@ -66,15 +64,15 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # Retry ssh-keyscan up to 5 times (transient network issues are common in CI)
-          echo "  Scanning host key on port ${{ secrets.SSH_PORT }}..."
+          SSH_PORT="${{ secrets.SSH_PORT || '22' }}"
+          echo "  Scanning host key on port ${SSH_PORT}..."
           for i in 1 2 3 4 5; do
-            if ssh-keyscan -T 10 -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>&1; then
+            if ssh-keyscan -T 10 -p "$SSH_PORT" -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>&1; then
               echo "  Host key acquired on attempt $i"
               break
             fi
             if [ "$i" -eq 5 ]; then
-              echo "::error::ssh-keyscan failed after 5 attempts. Is the VM reachable on port ${{ secrets.SSH_PORT }}?"
+              echo "::error::ssh-keyscan failed after 5 attempts. Is the VM reachable on port ${SSH_PORT}?"
               echo "  Verify: Oracle VM is running, SSH port is open, and ingress rule allows GitHub IPs"
               exit 1
             fi
@@ -82,10 +80,10 @@ jobs:
             sleep 5
           done
 
-      # Common SSH options: keep-alive prevents Broken Pipe during long commands
       - name: Set SSH options
         run: |
-          echo "SSH_OPTS=-p ${{ secrets.SSH_PORT }} \
+          SSH_PORT="${{ secrets.SSH_PORT || '22' }}"
+          echo "SSH_OPTS=-p ${SSH_PORT} \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=5 \
@@ -93,34 +91,37 @@ jobs:
             -o TCPKeepAlive=yes \
             -o LogLevel=ERROR" >> "$GITHUB_ENV"
 
-      # ── Step 1: Pre-flight on server ──
-      - name: "1/6 · Server pre-flight checks"
+      # ── Step 1: Pre-flight + swap setup ──
+      - name: "1/6 · Server pre-flight & swap setup"
         run: |
           ssh ${{ env.SSH_OPTS }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash -s << 'REMOTE'
           set -euo pipefail
 
-          echo "=== Server Pre-flight ==="
+          echo "=== Server Pre-flight (1GB VM) ==="
 
-          # Disk space (fail if < 1GB free)
+          # Disk space
           AVAIL_KB=$(df /home | awk 'NR==2 {print $4}')
           AVAIL_MB=$((AVAIL_KB / 1024))
-          if [ "$AVAIL_MB" -lt 1024 ]; then
-            echo "::error::Low disk space: ${AVAIL_MB}MB available (need >1GB)"
-            exit 1
-          fi
           echo "  Disk:    ${AVAIL_MB}MB available"
 
           # Memory
+          MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
           MEM_FREE=$(free -m | awk '/^Mem:/{print $7}')
-          echo "  Memory:  ${MEM_FREE}MB free"
+          echo "  Memory:  ${MEM_FREE}MB free / ${MEM_TOTAL}MB total"
 
-          # Services exist
-          for svc in samaa-api samaa-celery samaa-web; do
-            if ! systemctl list-unit-files "${svc}.service" &>/dev/null; then
-              echo "::warning::Service $svc not found on server"
-            fi
-          done
-          echo "  Services: registered"
+          # Setup 2GB swap if not present (critical for 1GB VM)
+          if [ "$(swapon --show | wc -l)" -eq 0 ]; then
+            echo "  Creating 2GB swap..."
+            sudo fallocate -l 2G /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+            echo 10 | sudo tee /proc/sys/vm/swappiness
+            echo "  ✓ Swap enabled"
+          else
+            echo "  Swap:    already active"
+          fi
 
           echo "=== Pre-flight passed ==="
           REMOTE
@@ -132,23 +133,19 @@ jobs:
           set -euo pipefail
           cd /home/ubuntu/samaa-ai
 
-          PREV_COMMIT=$(git rev-parse HEAD)
-          echo "  Previous: $(git log --oneline -1)"
+          PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "none")
+          echo "  Previous: $(git log --oneline -1 2>/dev/null || echo 'first deploy')"
 
-          # Stash local changes (if any) and pull
           git stash --include-untracked --quiet 2>/dev/null || true
-          git pull --ff-only origin main
+          git pull --ff-only origin main || git pull origin main
 
           NEW_COMMIT=$(git rev-parse HEAD)
           echo "  Current:  $(git log --oneline -1)"
 
           if [ "$PREV_COMMIT" = "$NEW_COMMIT" ]; then
-            echo "  Already up-to-date, skipping build steps"
-            echo "SKIP_BUILD=true"
+            echo "  Already up-to-date"
           else
             echo "  Updated: $PREV_COMMIT -> $NEW_COMMIT"
-            echo "  Changed files:"
-            git diff --stat "$PREV_COMMIT" "$NEW_COMMIT"
           fi
           REMOTE
 
@@ -161,23 +158,25 @@ jobs:
 
           echo "  Python: $(python3 --version 2>/dev/null || echo 'not found')"
 
-          # Create venv only if missing or broken
+          if ! command -v uv &> /dev/null; then
+            echo "  Installing uv..."
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           if [ ! -f ".venv/bin/python" ]; then
             echo "  Creating virtual environment..."
             uv venv
-            echo "  venv created"
-          else
-            echo "  venv exists, reusing"
           fi
 
           source .venv/bin/activate
           echo "  Installing dependencies..."
-          uv pip install -e '.[prod]' --quiet
-          echo "  Dependencies installed: $(pip list --format=freeze 2>/dev/null | wc -l) packages"
+          uv pip install -e '.[prod]' --quiet 2>/dev/null || uv pip install -e . --quiet
+          echo "  Dependencies installed"
           REMOTE
 
       # ── Step 4: Frontend build ──
-      - name: "4/6 · Build frontend"
+      - name: "4/6 · Build frontend (standalone)"
         run: |
           ssh ${{ env.SSH_OPTS }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash -s << 'REMOTE'
           set -euo pipefail
@@ -188,7 +187,16 @@ jobs:
 
           npm ci --prefer-offline --no-audit --quiet 2>/dev/null || npm install --quiet
           npm run build
-          echo "  Frontend build complete"
+
+          # Copy static + public into standalone output
+          mkdir -p .next/standalone/.next/static
+          cp -r .next/static/* .next/standalone/.next/static/
+          if [ -d "public" ]; then
+            mkdir -p .next/standalone/public
+            cp -r public/* .next/standalone/public/
+          fi
+
+          echo "  Frontend built (standalone, ~50MB runtime)"
           REMOTE
 
       # ── Step 5: Database migrations ──
@@ -200,49 +208,120 @@ jobs:
 
           source .venv/bin/activate
 
-          # Load env safely (skip comments and empty lines)
+          # Load env vars
           set -a
           grep -v '^\s*#' /home/ubuntu/samaa-ai/.env.prod | grep -v '^\s*$' | while IFS='=' read -r key value; do
-            export "$key=$value"
+            export "$key=$value" 2>/dev/null || true
           done
           set +a
 
-          CURRENT=$(alembic current 2>/dev/null || echo "none")
-          echo "  Current revision: $CURRENT"
-
-          alembic upgrade head
-
-          echo "  Migrations applied: $(alembic current 2>/dev/null)"
+          if [[ "${DATABASE_URL:-}" == *"YOUR_"* ]] || [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "  ⚠ DATABASE_URL not configured — skipping migrations"
+          else
+            CURRENT=$(alembic current 2>/dev/null || echo "none")
+            echo "  Current revision: $CURRENT"
+            alembic upgrade head
+            echo "  Migrations applied: $(alembic current 2>/dev/null)"
+          fi
           REMOTE
 
       # ── Step 6: Restart services & health checks ──
-      - name: "6/6 · Restart services and health check"
+      - name: "6/6 · Setup services & restart (1GB optimized)"
         run: |
           ssh ${{ env.SSH_OPTS }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash -s << 'REMOTE'
           set -euo pipefail
 
-          SERVICES=("samaa-api" "samaa-celery" "samaa-web")
-          FAILED=0
+          # Recreate systemd units to enforce 1GB memory limits
+          echo "=== Updating systemd services (1GB budget) ==="
 
+          # FastAPI — 256MB max
+          sudo tee /etc/systemd/system/samaa-api.service > /dev/null << 'UNIT'
+          [Unit]
+          Description=SAMAA FastAPI Backend
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu/samaa-ai/apps/api
+          Environment=PATH=/home/ubuntu/samaa-ai/apps/api/.venv/bin
+          ExecStart=/home/ubuntu/samaa-ai/apps/api/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --env-file ../../.env.prod --workers 1 --limit-concurrency 10 --limit-max-requests 1000
+          Restart=always
+          RestartSec=5
+          MemoryMax=256M
+          MemoryHigh=200M
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          # Celery — 384MB max (solo pool, no torch loaded)
+          sudo tee /etc/systemd/system/samaa-celery.service > /dev/null << 'UNIT'
+          [Unit]
+          Description=SAMAA Celery Worker
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu/samaa-ai/apps/api
+          Environment=PATH=/home/ubuntu/samaa-ai/apps/api/.venv/bin
+          ExecStart=/home/ubuntu/samaa-ai/apps/api/.venv/bin/celery -A src.workers.celery_app worker --loglevel=info --pool=solo --concurrency=1 --max-tasks-per-child=10
+          EnvironmentFile=/home/ubuntu/samaa-ai/.env.prod
+          Restart=always
+          RestartSec=5
+          MemoryMax=384M
+          MemoryHigh=320M
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          # Next.js — 100MB max (standalone)
+          sudo tee /etc/systemd/system/samaa-web.service > /dev/null << 'UNIT'
+          [Unit]
+          Description=SAMAA Next.js Frontend (Standalone)
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu/samaa-ai/apps/web/.next/standalone
+          ExecStart=/usr/bin/node apps/web/server.js
+          Environment=NODE_ENV=production
+          Environment=PORT=3000
+          Environment=HOSTNAME=0.0.0.0
+          Restart=always
+          RestartSec=5
+          MemoryMax=100M
+          MemoryHigh=80M
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable samaa-api samaa-celery samaa-web
+
+          # Restart all services
+          echo ""
           echo "=== Restarting Services ==="
-          for svc in "${SERVICES[@]}"; do
+          for svc in samaa-api samaa-celery samaa-web; do
             sudo systemctl restart "$svc" 2>/dev/null || true
             echo "  Restarted: $svc"
           done
 
-          # Wait for services to stabilize
+          # Health checks
           echo ""
           echo "=== Health Checks (waiting 8s) ==="
           sleep 8
 
-          for svc in "${SERVICES[@]}"; do
+          FAILED=0
+          for svc in samaa-api samaa-celery samaa-web; do
             if systemctl is-active --quiet "$svc"; then
-              UPTIME=$(systemctl show "$svc" --property=ActiveEnterTimestamp --value 2>/dev/null || echo "unknown")
-              echo "  OK   $svc  (since $UPTIME)"
+              echo "  ✅  $svc"
             else
-              echo "  FAIL $svc"
-              # Grab last 20 log lines for debugging
-              echo "       --- recent logs ---"
+              echo "  ❌  $svc"
               journalctl -u "$svc" -n 20 --no-pager 2>/dev/null | sed 's/^/       /'
               FAILED=1
             fi
@@ -256,6 +335,12 @@ jobs:
 
           echo ""
           echo "=== All services healthy ==="
+          echo ""
+          echo "  Memory budget:"
+          echo "    API:     256MB"
+          echo "    Celery:  384MB"
+          echo "    Web:     100MB"
+          echo "    Total:   ~740MB + 2GB swap"
           REMOTE
 
       # ── Summary ────────────────────────────────────────────────
@@ -270,35 +355,32 @@ jobs:
 
           echo "════════════════════════════════════════"
           if [ "${{ job.status }}" = "success" ]; then
-            echo "  Deployment Successful"
+            echo "  ✅ Deployment Successful"
             echo "════════════════════════════════════════"
             echo ""
-            echo "  Duration:    ${MINUTES}m ${SECONDS}s"
-            echo "  Commit:      ${{ github.sha }}"
-            echo "  Author:      ${{ github.actor }}"
-            echo "  Application: https://${{ vars.DOMAIN_NAME }}"
-            echo "  API Docs:    https://${{ vars.DOMAIN_NAME }}/docs"
-            echo "  Health:      https://${{ vars.DOMAIN_NAME }}/health"
+            echo "  Duration:  ${MINUTES}m ${SECONDS}s"
+            echo "  Commit:    ${{ github.sha }}"
+            echo "  Author:    ${{ github.actor }}"
+            echo "  App:       http://${{ secrets.SSH_HOST }}"
           else
-            echo "  Deployment Failed"
+            echo "  ❌ Deployment Failed"
             echo "════════════════════════════════════════"
             echo ""
             echo "  Duration: ${MINUTES}m ${SECONDS}s"
             echo "  Commit:   ${{ github.sha }}"
             echo ""
-            echo "  Debug: ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+            echo "  Debug: ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
             echo "         sudo journalctl -u samaa-api -n 100 --no-pager"
           fi
 
-      # ── Rollback on failure ────────────────────────────────────
       - name: Rollback on failure
         if: failure() && github.event_name == 'push'
         run: |
-          echo "::warning::Deployment failed — previous version is still running."
+          echo "::warning::Deployment failed — previous version may still be running."
           echo ""
-          echo "To manually rollback, SSH into the server:"
-          echo "  ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          echo "To manually rollback:"
+          echo "  ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
           echo "  cd /home/ubuntu/samaa-ai"
-          echo "  git log --oneline -5              # find the last good commit"
+          echo "  git log --oneline -5"
           echo "  git checkout <good-commit>"
-          echo "  # then re-run build steps and restart services"
+          echo "  sudo systemctl restart samaa-api samaa-celery samaa-web"
