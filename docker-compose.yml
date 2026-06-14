@@ -1,3 +1,16 @@
+# ============================================
+# SAMAA Local Development Infrastructure
+# ============================================
+# This file is ONLY for local development.
+# Production uses managed services:
+#   - Neon PostgreSQL (managed)
+#   - Upstash Redis (managed)
+#   - Cloudflare R2 (storage)
+#
+# Usage:
+#   docker compose up -d
+# ============================================
+
 services:
   postgres:
     image: pgvector/pgvector:pg16

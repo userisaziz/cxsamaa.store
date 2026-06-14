@@ -15,10 +15,9 @@ from src.storage.local import get_storage
 from src.workers.celery_app import celery_app
 from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
-    _download_audio_sync,
     _get_recording_sync,
     _update_recording_status_sync,
-    _upload_audio_sync,
+    _upload_audio_from_file_sync as _upload_audio_sync,
     load_manifest,
 )
 
@@ -190,7 +189,7 @@ def transcribe_audio_task(self, recording_id: str) -> str:
         # Download preprocessed audio
         preprocessed_key = f"preprocessed/{recording_id}/audio.wav"
         logger.info("[%s] Downloading preprocessed audio", recording_id)
-        audio_data = _download_audio_sync(storage, preprocessed_key)
+        audio_data = storage.download_sync(preprocessed_key)
 
         # For large files, chunk the audio (use 15-minute chunks with 30-second overlap)
         chunk_duration_ms = settings.audio_chunk_duration_minutes * 60 * 1000  # 15 minutes
@@ -313,7 +312,7 @@ def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str)
     try:
         storage = get_storage()
         chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
-        chunk_data = _download_audio_sync(storage, chunk_key)
+        chunk_data = storage.download_sync(chunk_key)
 
         # Apply VAD filter: strip silence before STT (saves 40-60% API cost)
         speech_segments = []

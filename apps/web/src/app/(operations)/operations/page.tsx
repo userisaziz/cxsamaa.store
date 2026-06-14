@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
-import { Upload, CheckCircle, XCircle, Loader2, FileAudio, Clock, Mic, Inbox } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Loader2, FileAudio, Clock, Mic, Inbox, Activity, Zap } from "lucide-react";
 import type { Brand, Store, Salesperson, Recording } from "@samaa/shared";
 
 interface UploadItem {
@@ -110,6 +110,20 @@ export default function OperationsPage() {
         `/recordings?page_size=100&date_from=${todayStr}T00:00:00&date_to=${todayStr}T23:59:59`
       ),
     refetchInterval: 10000,
+  });
+
+  // Fetch active pipeline recordings
+  const { data: activePipeline = [] } = useQuery({
+    queryKey: ["pipeline", "active"],
+    queryFn: () => api.get<Array<{
+      id: string;
+      status: string;
+      duration_seconds: number | null;
+      uploaded_at: string | null;
+      file_url: string;
+      salesperson_id: string;
+    }>>("/recordings/pipeline/active"),
+    refetchInterval: 3000, // Poll every 3 seconds for real-time updates
   });
 
   // Reset cascading selectors
@@ -525,6 +539,64 @@ export default function OperationsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Active Pipeline Monitor */}
+      {activePipeline.length > 0 && (
+        <Card className="mt-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] border-l-4 border-l-brand-green">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-brand-green-deep" />
+              <CardTitle>Active Pipeline Processing</CardTitle>
+              <span className="ml-auto flex items-center gap-1.5 rounded-full bg-brand-green-soft px-2.5 py-1 text-xs font-medium text-brand-green-deep">
+                <Zap className="h-3 w-3" />
+                {activePipeline.length} active
+              </span>
+            </div>
+            <CardDescription>
+              Recordings currently being processed through the AI pipeline
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {activePipeline.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-border p-3 transition-all hover:bg-surface/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-tag/8">
+                      <Loader2 className="h-4 w-4 animate-spin text-brand-tag" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink font-mono truncate">
+                        {rec.id.slice(0, 8)}...
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Clock className="h-3 w-3 text-stone shrink-0" />
+                        <p className="text-xs text-steel font-mono">
+                          {rec.duration_seconds ? `${Math.floor(rec.duration_seconds / 60)}:${(rec.duration_seconds % 60).toString().padStart(2, "0")}` : "Calculating..."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StatusBadge status={rec.status as any} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        window.open(`/recordings/${rec.id}`, "_blank");
+                      }}
+                    >
+                      View
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upload Queue */}
       {uploadQueue.length > 0 && (

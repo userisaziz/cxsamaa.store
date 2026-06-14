@@ -20,6 +20,7 @@ celery_app = Celery(
         "src.workers.turn_builder",
         "src.workers.role_classification",
         "src.workers.segmentation",
+        "src.workers.audio_stitcher",
         "src.workers.analysis",
         "src.workers.scoring",
     ],

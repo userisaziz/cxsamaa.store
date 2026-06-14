@@ -57,6 +57,7 @@ def _get_silence_gaps_sync(recording_id: str) -> list[tuple[float, float]]:
 
 def _store_conversations_sync(recording_id: str, conversations: list[dict]):
     """Store conversation records in DB."""
+    from src.models.conversation import ConversationAnalysis
     from src.models.recording import Recording
 
     with _SessionLocal() as session:
@@ -67,10 +68,17 @@ def _store_conversations_sync(recording_id: str, conversations: list[dict]):
         salesperson_id = recording.salesperson_id if recording else None
         recorded_at = recording.recorded_at if recording else None
 
-        # Clear any existing conversations for this recording
+        # Clear any existing conversations and their analysis (cascade manually)
+        conv_ids = [c.id for c in session.query(Conversation.id).filter(
+            Conversation.recording_id == uuid.UUID(recording_id)
+        ).all()]
+        if conv_ids:
+            session.query(ConversationAnalysis).filter(
+                ConversationAnalysis.conversation_id.in_(conv_ids)
+            ).delete(synchronize_session=False)
         session.query(Conversation).filter(
             Conversation.recording_id == uuid.UUID(recording_id)
-        ).delete()
+        ).delete(synchronize_session=False)
 
         for conv in conversations:
             conversation = Conversation(

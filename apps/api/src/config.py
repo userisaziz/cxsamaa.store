@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    upstash_redis_rest_url: str = ""  # Optional: Upstash REST API URL
+    upstash_redis_rest_token: str = ""  # Optional: Upstash REST API token
 
     # JWT
     jwt_secret: str = "change-me-to-a-random-secret-in-production"
@@ -41,12 +43,8 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
-    # Groq STT (Whisper Large v3)
-    stt_provider: str = "groq"  # "groq" or "riva"
-    groq_api_key: str = ""
-    groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_stt_model: str = "whisper-large-v3"
-    groq_stt_language: str = ""  # Empty = auto-detect; or set e.g. "en", "hi", "ar"
+    # STT Provider (NVIDIA Riva)
+    stt_provider: str = "riva"  # STT provider (default: "riva")
 
     # DeepSeek LLM (V4)
     llm_provider: str = "deepseek"  # "deepseek" or "nvidia"
@@ -70,16 +68,10 @@ class Settings(BaseSettings):
     vad_min_chunk_seconds: float = 3.0  # Skip VAD filtering for chunks shorter than this (not worth the overhead)
 
     # Audio Chunking for Long Recordings
-    # Groq Whisper has a 25 MB file limit — keep chunks well under that.
-    # 10 min of 16 kHz mono WAV ≈ 19.2 MB (safe for Groq)
-    audio_chunk_duration_minutes: int = 10  # 10-minute chunks (safe for Groq 25 MB limit)
+    # 10 min of 16 kHz mono WAV ≈ 19.2 MB (well under typical API limits)
+    audio_chunk_duration_minutes: int = 10  # 10-minute chunks
     audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
-    max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk (Groq limit)
-
-    # Sortformer Diarization (Future - NVIDIA)
-    diarization_use_sortformer: bool = False  # Enable when NVIDIA provides endpoint
-    sortformer_endpoint: str = ""
-    sortformer_model: str = "nvidia/sortformer-diarization-1.0"
+    max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk
 
     # App
     app_env: str = "development"
@@ -93,6 +85,16 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
+
+    @property
+    def is_managed_redis(self) -> bool:
+        """Check if using managed Redis (Upstash) vs local Docker."""
+        return "upstash.io" in self.redis_url or bool(self.upstash_redis_rest_url)
+
+    @property
+    def is_managed_database(self) -> bool:
+        """Check if using managed database (Neon/Supabase) vs local Docker."""
+        return "neon.tech" in self.database_url or "supabase.co" in self.database_url
 
 
 settings = Settings()

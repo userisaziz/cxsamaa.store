@@ -1,14 +1,35 @@
 #!/usr/bin/env python3
-"""Reprocess all recordings with new segmentation logic and monitor every stage."""
+"""Reprocess all recordings with new segmentation logic and monitor every stage.
+
+Usage:
+  # Development (localhost:8000)
+  python reprocess_all.py
+  
+  # Production (with env vars)
+  API_URL=https://api.samaa.com python reprocess_all.py
+  API_URL=https://api.samaa.com ADMIN_EMAIL=admin@samaa.com ADMIN_PASSWORD=xxx python reprocess_all.py
+"""
 import subprocess
 import time
 import json
 import sys
+import os
 from datetime import datetime
 
 def run_cmd(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout.strip()
+
+# Configuration from environment (defaults to development)
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@samaa.com")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+MAX_TIMEOUT = int(os.getenv("MAX_TIMEOUT", "600"))  # 10 minutes per recording
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))
+
+print(f"🌐 API URL: {API_URL}")
+print(f"👤 Admin: {ADMIN_EMAIL}")
+print(f"⏱️  Timeout: {MAX_TIMEOUT}s per recording\n")
 
 # Pipeline stages in order
 PIPELINE_STAGES = [
@@ -37,14 +58,19 @@ STAGE_EMOJIS = {
 def get_recording_status(token, recording_id):
     """Fetch current recording status and details."""
     result = run_cmd(f'''curl -s -H "Authorization: Bearer {token}" \
-"http://localhost:8000/api/v1/recordings/{recording_id}"''')
+"{API_URL}/api/v1/recordings/{recording_id}"''')
     try:
         return json.loads(result)
     except:
         return None
 
-def monitor_recording_progress(token, recording_id, timeout=600, poll_interval=5):
+def monitor_recording_progress(token, recording_id, timeout=None, poll_interval=None):
     """Monitor a recording through all pipeline stages with real-time updates."""
+    if timeout is None:
+        timeout = MAX_TIMEOUT
+    if poll_interval is None:
+        poll_interval = POLL_INTERVAL
+    
     start_time = time.time()
     last_status = None
     stage_times = {}
@@ -116,9 +142,9 @@ def monitor_recording_progress(token, recording_id, timeout=600, poll_interval=5
 
 # Login
 print("🔑 Logging in...")
-token = run_cmd('''curl -s -X POST http://localhost:8000/api/v1/auth/login \
+token = run_cmd(f'''curl -s -X POST {API_URL}/api/v1/auth/login \
 -H "Content-Type: application/json" \
--d '{"email":"admin@samaa.com","password":"admin123"}' | \
+-d '{{"email":"{ADMIN_EMAIL}","password":"{ADMIN_PASSWORD}"}}' | \
 python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"''')
 
 if not token:
@@ -130,7 +156,7 @@ print("✓ Logged in\n")
 # Get recordings
 print("📊 Fetching recordings...")
 recordings_json = run_cmd(f'''curl -s -H "Authorization: Bearer {token}" \
-"http://localhost:8000/api/v1/recordings?page=1&page_size=100"''')
+"{API_URL}/api/v1/recordings?page=1&page_size=100"''')
 
 data = json.loads(recordings_json)
 recordings = data.get("items", [])
@@ -164,7 +190,7 @@ for i, recording in enumerate(to_reprocess, 1):
     # Trigger reprocess
     result = run_cmd(f'''curl -s -X POST \
 -H "Authorization: Bearer {token}" \
-"http://localhost:8000/api/v1/recordings/{rec_id}/reprocess"''')
+"{API_URL}/api/v1/recordings/{rec_id}/reprocess"''')
     
     if "pipeline triggered" in result.lower() or "200" in result or "UPLOADED" in result:
         print(f"✓ Pipeline triggered successfully")
@@ -176,8 +202,8 @@ for i, recording in enumerate(to_reprocess, 1):
         final_status, error = monitor_recording_progress(
             token, 
             rec_id, 
-            timeout=600,  # 10 minutes max
-            poll_interval=5
+            timeout=MAX_TIMEOUT,
+            poll_interval=POLL_INTERVAL
         )
         
         if final_status == "COMPLETED":

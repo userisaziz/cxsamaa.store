@@ -6,8 +6,13 @@
 #   chmod +x start_servers.sh
 #   ./start_servers.sh
 #
-# Starts: PostgreSQL+Redis (Docker), FastAPI, Celery worker, Next.js
+# Starts: FastAPI, Celery worker, Next.js
+# Optional: PostgreSQL+Redis (Docker) for local development
 # Press Ctrl+C to stop all services.
+#
+# Architecture Options:
+#   Local Dev:     Docker (PostgreSQL + Redis)
+#   Production:    Neon PostgreSQL + Upstash Redis (set env vars)
 # ============================================
 
 set -e
@@ -83,50 +88,61 @@ fi
 
 echo -e "${GREEN}  ✓ Environment configured${NC}"
 
-# --- Step 3: Start Docker (PostgreSQL + Redis) ---
-echo -e "${YELLOW}[3/5] Starting infrastructure (PostgreSQL + Redis)...${NC}"
+# --- Step 3: Start Infrastructure (Optional Docker) ---
+echo -e "${YELLOW}[3/5] Checking infrastructure...${NC}"
 
 STARTED_DOCKER=false
-if docker compose ps --services 2>/dev/null | grep -q postgres; then
-    # Check if services are actually running
-    if docker compose ps 2>/dev/null | grep -q "Up\|running"; then
-        echo -e "${GREEN}  ✓ Docker services already running${NC}"
+
+# Check if using managed services (Neon/Upstash) or local Docker
+if [[ "$DATABASE_URL" == *"neon.tech"* ]] || [[ "$DATABASE_URL" == *"supabase.co"* ]]; then
+    echo -e "${GREEN}  ✓ Using managed PostgreSQL (Neon/Supabase)${NC}"
+elif [[ "$REDIS_URL" == *"upstash.io"* ]]; then
+    echo -e "${GREEN}  ✓ Using managed Redis (Upstash)${NC}"
+else
+    # Use local Docker for development
+    echo -e "${YELLOW}  Starting local Docker services (PostgreSQL + Redis)...${NC}"
+    
+    if docker compose ps --services 2>/dev/null | grep -q postgres; then
+        # Check if services are actually running
+        if docker compose ps 2>/dev/null | grep -q "Up\|running"; then
+            echo -e "${GREEN}  ✓ Docker services already running${NC}"
+        else
+            cd "$ROOT_DIR" && docker compose up -d
+            STARTED_DOCKER=true
+            echo -e "${GREEN}  ✓ Docker services started${NC}"
+        fi
     else
         cd "$ROOT_DIR" && docker compose up -d
         STARTED_DOCKER=true
         echo -e "${GREEN}  ✓ Docker services started${NC}"
     fi
-else
-    cd "$ROOT_DIR" && docker compose up -d
-    STARTED_DOCKER=true
-    echo -e "${GREEN}  ✓ Docker services started${NC}"
+
+    # Wait for PostgreSQL to be ready
+    echo -n "  Waiting for PostgreSQL"
+    for i in $(seq 1 15); do
+        if docker compose exec -T postgres pg_isready -U samaa >/dev/null 2>&1; then
+            echo ""
+            echo -e "${GREEN}  ✓ PostgreSQL ready${NC}"
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    echo ""
+
+    # Wait for Redis
+    echo -n "  Waiting for Redis"
+    for i in $(seq 1 10); do
+        if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
+            echo ""
+            echo -e "${GREEN}  ✓ Redis ready${NC}"
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    echo ""
 fi
-
-# Wait for PostgreSQL to be ready
-echo -n "  Waiting for PostgreSQL"
-for i in $(seq 1 15); do
-    if docker compose exec -T postgres pg_isready -U samaa >/dev/null 2>&1; then
-        echo ""
-        echo -e "${GREEN}  ✓ PostgreSQL ready${NC}"
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
-echo ""
-
-# Wait for Redis
-echo -n "  Waiting for Redis"
-for i in $(seq 1 10); do
-    if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
-        echo ""
-        echo -e "${GREEN}  ✓ Redis ready${NC}"
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
-echo ""
 
 # --- Step 4: Run migrations ---
 echo -e "${YELLOW}[4/5] Running database migrations...${NC}"

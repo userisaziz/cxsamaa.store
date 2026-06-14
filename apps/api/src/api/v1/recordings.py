@@ -100,6 +100,46 @@ async def upload_recording_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/pipeline/active", response_model=list[dict])
+async def get_active_pipeline_recordings(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_operator_up),
+):
+    """Get all recordings currently in the pipeline with progress info."""
+    from src.models.recording import Recording, RecordingStatus
+    from sqlalchemy import select
+    
+    active_statuses = [
+        RecordingStatus.PREPROCESSING,
+        RecordingStatus.TRANSCRIBING,
+        RecordingStatus.DIARIZING,
+        RecordingStatus.RECONCILING,
+        RecordingStatus.SEGMENTING,
+        RecordingStatus.STITCHING,
+        RecordingStatus.ANALYZING,
+        RecordingStatus.SCORING,
+    ]
+    
+    result = await db.execute(
+        select(Recording)
+        .where(Recording.status.in_(active_statuses))
+        .order_by(Recording.uploaded_at.desc())
+    )
+    recordings = result.scalars().all()
+    
+    return [
+        {
+            "id": str(r.id),
+            "status": r.status.value,
+            "duration_seconds": r.duration_seconds,
+            "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else None,
+            "file_url": r.file_url,
+            "salesperson_id": str(r.salesperson_id),
+        }
+        for r in recordings
+    ]
+
+
 @router.get("/{recording_id}/audio")
 async def stream_recording_audio(
     recording_id: str,

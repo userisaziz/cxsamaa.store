@@ -17,7 +17,6 @@ from src.storage.local import get_storage
 from src.workers.celery_app import celery_app
 from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
-    _download_audio_sync,
     _get_recording_sync,
     _update_recording_status_sync,
     load_manifest,
@@ -122,7 +121,7 @@ def diarize_audio(self, recording_id: str) -> str:
 
         preprocessed_key = f"preprocessed/{recording_id}/audio.wav"
         logger.info("[%s] Downloading preprocessed audio for diarization", recording_id)
-        audio_data = _download_audio_sync(storage, preprocessed_key)
+        audio_data = storage.download_sync(preprocessed_key)
 
         logger.info("[%s] Running diarization (pyannote.audio primary)", recording_id)
         speaker_segments = diarize_audio_api(audio_data)
@@ -226,7 +225,7 @@ def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
     try:
         storage = get_storage()
         chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
-        chunk_data = _download_audio_sync(storage, chunk_key)
+        chunk_data = storage.download_sync(chunk_key)
 
         speaker_segments = diarize_audio_api(chunk_data, return_embeddings=True)
 

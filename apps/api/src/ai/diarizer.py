@@ -73,7 +73,7 @@ def diarize_audio(
             ...
         ]
     """
-    # Try pyannote.audio first (if enabled)
+    # Try pyannote.audio (if enabled and available)
     if settings.diarization_use_pyannote:
         try:
             diarizer = _get_pyannote_diarizer()
@@ -83,30 +83,14 @@ def diarize_audio(
                 if segments:
                     logger.info(f"Pyannote diarization successful: {len(segments)} segments")
                     return segments
-                logger.warning("Pyannote returned no segments, falling back to NVIDIA")
+                logger.warning("Pyannote returned no segments")
         except Exception as e:
-            logger.warning(f"Pyannote diarization failed: {e}. Falling back to NVIDIA.")
+            logger.warning(f"Pyannote diarization failed: {e}")
     
-    # Fallback to NVIDIA NeMo
-    logger.info(f"Using NVIDIA NeMo diarization ({len(audio_bytes)} bytes)")
-    
-    files = {
-        "file": (filename, io.BytesIO(audio_bytes), "audio/wav"),
-    }
-    data = {
-        "model": settings.nvidia_diarization_model,
-    }
-
-    try:
-        response = nvidia_client.post_multipart(
-            endpoint="/audio/transcriptions",
-            files=files,
-            data=data,
-        )
-        return _parse_diarization_response(response)
-    except NVIDIAAPIError as e:
-        logger.warning(f"Diarization API failed: {e}. Using fallback diarization.")
-        return []
+    # No cloud fallback available (NVIDIA deprecated their diarization API)
+    # Return empty list — worker layer will use rule-based speaker assignment from STT metadata
+    logger.info("No diarization engine available, worker will use rule-based assignment")
+    return []
 
 
 def _parse_diarization_response(response: dict[str, Any]) -> list[dict[str, Any]]:

@@ -23,27 +23,28 @@ You MUST respond with valid JSON matching this exact schema:
 {
     "intent": "Primary customer purchase intent or inquiry (one concise sentence)",
     "customer_expectation": "What the customer expects or wants from the product/service (e.g. durability, warranty, features, style). One concise sentence or null if not clear",
-    "products": ["product1", "product2"],
+    "products": {"type": "array", "items": {"type": "string"}, "description": "Specific products discussed or requested. If none, return []"},
     "budget": "Budget range if mentioned (e.g. '$200-$500'), or null if not mentioned",
-    "objections": [
-        {
-            "category": "Price|Features|Timing|Trust|Competitor|Other",
+    "objections": {
+        "type": "array",
+        "items": {
+            "category": {"type": "string", "enum": ["Price", "Features", "Timing", "Trust", "Competitor", "Other"]},
             "issue": "The specific customer concern or objection",
             "response": "How the salesperson addressed or responded to this objection"
         }
-    ],
-    "competitors": ["competitor1", "competitor2"],
+    },
+    "competitors": {"type": "array", "items": {"type": "string"}, "description": "Competitor brands mentioned. If none, return []"},
     "closing_attempt": true,
-    "outcome": "SALE_MADE" | "LOST" | "FOLLOW_UP_NEEDED",
+    "outcome": {"type": "string", "enum": ["SALE_MADE", "LOST", "FOLLOW_UP_NEEDED"]},
     "loss_reason": "If outcome is LOST, a concise explanation of why the sale was lost based on the conversation. null if outcome is not LOST",
-    "confidence": 0-100,
+    "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
     "summary": "One paragraph summary of the conversation",
     "coaching_notes": "Specific coaching feedback for the salesperson based on their performance. Reference actual conversation moments and suggest SOP-compliant alternatives where applicable."
 }
 
 Rules:
 - "outcome" must be exactly one of: SALE_MADE, LOST, FOLLOW_UP_NEEDED
-- "confidence" is your confidence (0-100) in the accuracy of this analysis
+- "confidence" is your confidence as an integer from 0 to 100
 - "products" should list specific products discussed or requested
 - "objections" must be an array of objects with category, issue, and response. If no objections, use empty array []
 - "category" must be one of: Price, Features, Timing, Trust, Competitor, Other
@@ -53,6 +54,7 @@ Rules:
 - "customer_expectation" captures what the customer is looking for or expects from the purchase
 - "coaching_notes" should be constructive and specific, referencing actual conversation moments and suggesting best-practice SOP responses
 - If the conversation is too short or unclear, set confidence below 85
+- If there are no products, competitors, or objections, you MUST return an empty array [], never null
 - Respond ONLY with valid JSON, no additional text"""
 
 
@@ -83,34 +85,27 @@ def analyze_conversation(
 
     for attempt in range(max_retries + 1):
         try:
+            # Slightly increase temperature on retries to escape local minima
+            temp = 0.1 if attempt == 0 else 0.3
+
             response_text = nvidia_client.chat_completion(
-                messages=messages,
-                temperature=0.1,
+                messages=messages,  # Use original prompt for stateless retries
+                temperature=temp,
                 max_tokens=2048,
                 response_format={"type": "json_object"},
             )
 
             analysis = _parse_analysis_response(response_text)
             if analysis is None:
-                logger.warning(f"Failed to parse analysis response (attempt {attempt + 1})")
+                logger.warning("Failed to parse analysis response (attempt %d)", attempt + 1)
                 if attempt < max_retries:
-                    messages.append({"role": "assistant", "content": response_text})
-                    messages.append({
-                        "role": "user",
-                        "content": "Your response was not valid JSON matching the required schema. Please try again with valid JSON only.",
-                    })
                     continue
                 return None
 
             # Validate required fields
             if not _validate_analysis(analysis):
-                logger.warning(f"Analysis validation failed (attempt {attempt + 1}): {analysis}")
+                logger.warning("Analysis validation failed (attempt %d)", attempt + 1)
                 if attempt < max_retries:
-                    messages.append({"role": "assistant", "content": response_text})
-                    messages.append({
-                        "role": "user",
-                        "content": "Your response was missing required fields or had invalid values. Please ensure 'outcome' is one of SALE_MADE/LOST/FOLLOW_UP_NEEDED and 'confidence' is 0-100. Try again.",
-                    })
                     continue
                 return None
 
@@ -126,12 +121,12 @@ def analyze_conversation(
             return analysis
 
         except NVIDIAAPIError as exc:
-            logger.error(f"NVIDIA API error during analysis: {exc}")
+            logger.error("NVIDIA API error during analysis: %s", exc)
             if attempt < max_retries:
                 continue
             return None
         except Exception as exc:
-            logger.error(f"Unexpected error during analysis: {exc}")
+            logger.error("Unexpected error during analysis: %s", exc)
             return None
 
 
@@ -167,20 +162,38 @@ def _validate_analysis(analysis: dict[str, Any]) -> bool:
     """Validate that the analysis has all required fields with valid values."""
     valid_outcomes = {"SALE_MADE", "LOST", "FOLLOW_UP_NEEDED"}
 
-    # Required fields
-    if "outcome" not in analysis or analysis["outcome"] not in valid_outcomes:
-        logger.warning(f"Invalid outcome: {analysis.get('outcome')}")
+    # Required fields - normalize outcome before validation
+    if "outcome" not in analysis:
+        logger.warning("Missing outcome field")
         return False
 
-    if "confidence" not in analysis:
-        analysis["confidence"] = 50  # Default if missing
-
-    # Clamp confidence to 0-100
-    confidence = analysis.get("confidence", 50)
-    if not isinstance(confidence, (int, float)):
-        analysis["confidence"] = 50
+    outcome = analysis["outcome"]
+    if isinstance(outcome, str):
+        # Normalize: "Sale Made" -> "SALE_MADE", "Follow-up Needed" -> "FOLLOW_UP_NEEDED"
+        normalized = outcome.upper().replace(" ", "_").replace("-", "_")
+        if normalized in valid_outcomes:
+            analysis["outcome"] = normalized
+        else:
+            logger.warning("Invalid outcome enum: %s", outcome)
+            return False
     else:
-        analysis["confidence"] = max(0, min(100, int(confidence)))
+        logger.warning("Invalid outcome type: %s", type(outcome))
+        return False
+
+    # Robust confidence parsing
+    conf = analysis.get("confidence", 50)
+    if isinstance(conf, str):
+        # Strip whitespace, percentages, and non-numeric chars (except dots)
+        clean_conf = re.sub(r'[^\d.]', '', conf)
+        try:
+            conf = float(clean_conf) if clean_conf else 50
+        except ValueError:
+            conf = 50
+    elif not isinstance(conf, (int, float)):
+        conf = 50
+
+    # Clamp to 0-100 integer
+    analysis["confidence"] = max(0, min(100, int(conf)))
 
     # Ensure list fields are lists
     for field in ("products", "competitors"):
@@ -195,13 +208,25 @@ def _validate_analysis(analysis: dict[str, Any]) -> bool:
     elif isinstance(analysis["objections"], str):
         analysis["objections"] = [{"category": "Other", "issue": analysis["objections"], "response": ""}]
     elif isinstance(analysis["objections"], list):
+        valid_categories = {"Price", "Features", "Timing", "Trust", "Competitor", "Other"}
         normalised = []
         for obj in analysis["objections"]:
             if isinstance(obj, str):
                 normalised.append({"category": "Other", "issue": obj, "response": ""})
             elif isinstance(obj, dict):
+                # Validate and normalize category
+                cat = obj.get("category", "Other")
+                if isinstance(cat, str):
+                    cat_title = cat.strip().title()
+                    if cat_title not in valid_categories:
+                        cat = "Other"
+                    else:
+                        cat = cat_title
+                else:
+                    cat = "Other"
+
                 normalised.append({
-                    "category": obj.get("category", "Other"),
+                    "category": cat,
                     "issue": obj.get("issue", str(obj)),
                     "response": obj.get("response", ""),
                 })
