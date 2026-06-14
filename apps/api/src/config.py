@@ -43,11 +43,19 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
-    # STT Provider (NVIDIA Riva)
+    # STT Provider (NVIDIA Riva with Deepgram fallback)
     stt_provider: str = "riva"  # STT provider (default: "riva")
+    stt_fallback_provider: str = "deepgram"  # Fallback STT when primary fails (default: "deepgram")
 
-    # DeepSeek LLM (V4)
-    llm_provider: str = "deepseek"  # "deepseek" or "nvidia"
+    # Deepgram STT (fallback provider)
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-3"  # Deepgram STT model (nova-3, nova-2, etc.)
+    deepgram_language: str = "en"  # Language code (en, hi, ar, etc.)
+    deepgram_timeout: int = 300  # 5 minutes per API call
+
+    # DeepSeek LLM (V4) with NVIDIA fallback
+    llm_provider: str = "deepseek"  # Primary LLM provider: "deepseek" or "nvidia"
+    llm_fallback_provider: str = "nvidia"  # Fallback LLM when primary fails (default: "nvidia")
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_llm_model: str = "deepseek-v4-flash"  # or "deepseek-v4-pro"

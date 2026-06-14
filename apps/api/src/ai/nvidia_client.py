@@ -237,7 +237,10 @@ class NVIDIAClient:
         max_tokens: int = 4096,
         response_format: dict | None = None,
     ) -> str:
-        """Call LLM chat completions — dispatches to DeepSeek or NVIDIA based on LLM_PROVIDER.
+        """Call LLM chat completions with automatic fallback.
+
+        Primary: Configured provider (DeepSeek or NVIDIA)
+        Fallback: NVIDIA Llama (when DeepSeek fails)
 
         Both providers use OpenAI-compatible /chat/completions endpoints.
 
@@ -251,6 +254,30 @@ class NVIDIAClient:
         Returns:
             The assistant's response text content
         """
+        # Try primary provider
+        try:
+            return self._chat_completion_primary(
+                messages, model, temperature, max_tokens, response_format
+            )
+        except Exception as e:
+            logger.warning(
+                "Primary LLM failed: %s. Attempting fallback to %s...",
+                e, settings.llm_fallback_provider
+            )
+            # Try fallback provider
+            return self._chat_completion_fallback(
+                messages, model, temperature, max_tokens, response_format, e
+            )
+
+    def _chat_completion_primary(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None,
+        temperature: float,
+        max_tokens: int,
+        response_format: dict | None,
+    ) -> str:
+        """Execute chat completion with the primary configured provider."""
         cfg = _get_llm_provider_config()
         provider_name = cfg["provider_name"]
 
@@ -315,6 +342,141 @@ class NVIDIAClient:
                     )
 
         raise NVIDIAAPIError(f"{provider_name} failed after {self._max_retries} retries: {last_error}")
+
+    def _chat_completion_fallback(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None,
+        temperature: float,
+        max_tokens: int,
+        response_format: dict | None,
+        primary_error: Exception,
+    ) -> str:
+        """Execute chat completion with fallback provider.
+        
+        Args:
+            messages: Chat messages
+            model: Model override
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens
+            response_format: Response format
+            primary_error: The exception from the primary provider
+            
+        Returns:
+            Response text from fallback provider
+            
+        Raises:
+            NVIDIAAPIError: If fallback also fails
+        """
+        fallback_provider = settings.llm_fallback_provider.lower()
+        
+        # If primary was already NVIDIA, no fallback available
+        primary_provider = settings.llm_provider.lower()
+        if primary_provider == fallback_provider:
+            logger.error("Primary and fallback LLM providers are the same: %s", fallback_provider)
+            raise primary_error
+        
+        # Build fallback config
+        if fallback_provider == "nvidia":
+            cfg = {
+                "base_url": settings.nvidia_base_url.rstrip("/"),
+                "api_key": settings.nvidia_api_key,
+                "default_model": settings.nvidia_llm_model,
+                "timeout": settings.nvidia_timeout,
+                "provider_name": "NVIDIA (fallback)",
+            }
+        elif fallback_provider == "deepseek":
+            cfg = {
+                "base_url": settings.deepseek_base_url.rstrip("/"),
+                "api_key": settings.deepseek_api_key,
+                "default_model": settings.deepseek_llm_model,
+                "timeout": settings.deepseek_timeout,
+                "provider_name": "DeepSeek (fallback)",
+            }
+        else:
+            logger.error("Invalid fallback LLM provider: %s", fallback_provider)
+            raise primary_error
+        
+        if not cfg["api_key"]:
+            logger.error("Fallback provider API key not configured: %s", fallback_provider)
+            raise primary_error
+        
+        payload: dict[str, Any] = {
+            "model": model or cfg["default_model"],
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if response_format:
+            payload["response_format"] = response_format
+
+        url = f"{cfg['base_url']}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {cfg['api_key']}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        logger.info("Attempting fallback LLM transcription with %s", cfg["provider_name"])
+        
+        last_error = None
+        with httpx.Client(timeout=cfg["timeout"]) as client:
+            for attempt in range(self._max_retries):
+                try:
+                    logger.debug(
+                        f"{cfg['provider_name']} chat/completions (model={payload['model']}, "
+                        f"attempt {attempt + 1}/{self._max_retries})"
+                    )
+                    response = client.post(url, json=payload, headers=headers)
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        choices = data.get("choices", [])
+                        if not choices:
+                            raise NVIDIAAPIError(
+                                f"{cfg['provider_name']}: No choices in chat completion response"
+                            )
+                        content = choices[0].get("message", {}).get("content", "")
+                        logger.info("Fallback LLM (%s) transcription successful", cfg["provider_name"])
+                        return content
+
+                    if self._should_retry(response.status_code) and attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"{cfg['provider_name']} {response.status_code}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
+
+                    self._handle_error_response(response, cfg["provider_name"])
+
+                except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                    last_error = exc
+                    if attempt < self._max_retries - 1:
+                        delay = self._retry_base_delay * (2 ** attempt)
+                        logger.warning(
+                            f"{cfg['provider_name']} connection error: {exc}, "
+                            f"retrying in {delay}s (attempt {attempt + 1})"
+                        )
+                        time.sleep(delay)
+                        continue
+                    raise NVIDIAAPIError(
+                        f"{cfg['provider_name']} connection failed after {self._max_retries} attempts: {exc}"
+                    )
+
+        # Both primary and fallback failed
+        fallback_error = NVIDIAAPIError(
+            f"{cfg['provider_name']} failed after {self._max_retries} retries: {last_error}"
+        )
+        logger.error(
+            "Fallback LLM also failed: %s. Primary error: %s",
+            fallback_error, primary_error
+        )
+        raise NVIDIAAPIError(
+            f"All LLM providers failed. Primary ({settings.llm_provider}): {primary_error}. "
+            f"Fallback ({fallback_provider}): {fallback_error}"
+        ) from fallback_error
 
     def embeddings(
         self,
