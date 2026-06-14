@@ -10,7 +10,7 @@ set -e
 
 ORACLE_IP="92.4.68.96"
 ORACLE_USER="opc"
-REPO_URL="https://github.com/userisaziz/xsamaa-ai-pipeline.git"
+REPO_URL="https://github.com/userisaziz/samaa-ai.git"
 
 echo "════════════════════════════════════════"
 echo "  🚀 SAMAA Oracle Cloud Setup"
