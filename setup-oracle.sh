@@ -8,8 +8,8 @@
 
 set -e
 
-ORACLE_IP="92.4.68.96"
-ORACLE_USER="opc"
+ORACLE_IP="92.4.87.24"
+ORACLE_USER="ubuntu"
 REPO_URL="https://github.com/userisaziz/samaa-ai.git"
 
 echo "════════════════════════════════════════"
@@ -108,25 +108,25 @@ export PATH="$HOME/.local/bin:$PATH"
 cd ~
 
 # Clone if not exists
-if [ ! -d "xsamaa-ai-pipeline" ]; then
+if [ ! -d "samaa-ai" ]; then
     echo "Cloning repository..."
-    git clone https://github.com/userisaziz/xsamaa-ai-pipeline.git
+    git clone https://github.com/userisaziz/samaa-ai.git
     echo "✅ Repository cloned"
 else
     echo "✅ Repository already exists"
-    cd xsamaa-ai-pipeline
+    cd samaa-ai
     git pull origin main 2>/dev/null || echo "Note: Pull failed (might be first setup)"
 fi
 
 # Create uploads directory
-mkdir -p ~/xsamaa-ai-pipeline/apps/api/uploads
+mkdir -p ~/samaa-ai/apps/api/uploads
 
 REMOTE_SCRIPT
 echo ""
 
 # Step 4: Copy .env.prod (now that repo exists)
 echo "📝 Step 4: Uploading .env.prod..."
-scp -o StrictHostKeyChecking=no .env.prod $ORACLE_USER@$ORACLE_IP:~/xsamaa-ai-pipeline/.env.prod
+scp -o StrictHostKeyChecking=no .env.prod $ORACLE_USER@$ORACLE_IP:~/samaa-ai/.env.prod
 echo "✅ .env.prod uploaded"
 echo ""
 
@@ -137,7 +137,7 @@ set -e
 
 export PATH="$HOME/.local/bin:$PATH"
 
-cd ~/xsamaa-ai-pipeline
+cd ~/samaa-ai
 
 # Setup Python venv and install dependencies
 cd apps/api
@@ -174,7 +174,7 @@ echo "🗄️ Step 6: Running database migrations..."
 ssh -o StrictHostKeyChecking=no -i ~/.ssh/samaa_deploy $ORACLE_USER@$ORACLE_IP << 'REMOTE_SCRIPT'
 set -e
 
-cd ~/xsamaa-ai-pipeline/apps/api
+cd ~/samaa-ai/apps/api
 source .venv/bin/activate
 export $(cat ../../.env.prod | xargs)
 
@@ -197,10 +197,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=opc
-WorkingDirectory=/home/opc/xsamaa-ai-pipeline/apps/api
-Environment=PATH=/home/opc/xsamaa-ai-pipeline/apps/api/.venv/bin
-ExecStart=/home/opc/xsamaa-ai-pipeline/apps/api/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --env-file ../../.env.prod --workers 1
+User=ubuntu
+WorkingDirectory=/home/ubuntu/samaa-ai/apps/api
+Environment=PATH=/home/ubuntu/samaa-ai/apps/api/.venv/bin
+ExecStart=/home/ubuntu/samaa-ai/apps/api/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --env-file ../../.env.prod --workers 1
 Restart=always
 RestartSec=5
 MemoryMax=400M
@@ -217,11 +217,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=opc
-WorkingDirectory=/home/opc/xsamaa-ai-pipeline/apps/api
-Environment=PATH=/home/opc/xsamaa-ai-pipeline/apps/api/.venv/bin
-ExecStart=/home/opc/xsamaa-ai-pipeline/apps/api/.venv/bin/celery -A src.workers.celery_app worker --loglevel=info --pool=solo --concurrency=1
-EnvironmentFile=/home/opc/xsamaa-ai-pipeline/.env.prod
+User=ubuntu
+WorkingDirectory=/home/ubuntu/samaa-ai/apps/api
+Environment=PATH=/home/ubuntu/samaa-ai/apps/api/.venv/bin
+ExecStart=/home/ubuntu/samaa-ai/apps/api/.venv/bin/celery -A src.workers.celery_app worker --loglevel=info --pool=solo --concurrency=1
+EnvironmentFile=/home/ubuntu/samaa-ai/.env.prod
 Restart=always
 RestartSec=5
 MemoryMax=300M
@@ -238,8 +238,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=opc
-WorkingDirectory=/home/opc/xsamaa-ai-pipeline/apps/web
+User=ubuntu
+WorkingDirectory=/home/ubuntu/samaa-ai/apps/web
 ExecStart=/usr/bin/node server.js
 Environment=NODE_ENV=production
 Environment=PORT=3000
