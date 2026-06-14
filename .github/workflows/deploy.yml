@@ -42,7 +42,8 @@ jobs:
             echo ""
             
             # Navigate to app directory
-            cd /home/opc/xsamaa-ai-pipeline
+            cd /home/ubuntu/samaa-ai
+          
             
             # Show current commit
             echo "📍 Current commit:"
@@ -156,5 +157,5 @@ jobs:
           echo ""
           echo "Check GitHub Actions logs for details."
           echo "SSH into Oracle VM to investigate:"
-          echo "  ssh opc@${{ secrets.SSH_HOST }}"
+          echo "  ssh ubuntu@${{ secrets.SSH_HOST }}"
           echo "  sudo journalctl -u samaa-api -n 100 --no-pager"
