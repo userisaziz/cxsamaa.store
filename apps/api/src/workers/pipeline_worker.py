@@ -131,3 +131,16 @@ def _enqueue_next_or_complete(
     else:
         _update_status(recording_id, "COMPLETED")
         logger.info("[%s] Pipeline completed", recording_id)
+
+
+def enqueue_next_stage_celery(
+    recording_id: str,
+    pipeline_version: str,
+    next_index: int,
+) -> None:
+    """Public wrapper to enqueue the next stage via Celery.
+    
+    Called from pipeline.py when skipping already-completed stages
+    or after successfully completing a stage.
+    """
+    _enqueue_next_or_complete(recording_id, pipeline_version, next_index)
