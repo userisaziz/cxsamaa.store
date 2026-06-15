@@ -7,7 +7,6 @@ from src.config import settings
 from src.models.conversation import Conversation
 from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment
-from src.workers.celery_app import celery_app
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -96,8 +95,11 @@ def _store_conversations_sync(recording_id: str, conversations: list[dict]):
         logger.info("[%s] Stored %d conversations", recording_id, len(conversations))
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="segment_conversations")
-def segment_conversations(self, recording_id: str) -> str:
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def segment_conversations(recording_id: str) -> str:
     """Segment recording into discrete customer conversations.
 
     Uses silence gaps, greeting detection, and farewell detection to identify
@@ -144,12 +146,18 @@ def segment_conversations(self, recording_id: str) -> str:
             recording_id,
             len(conversations),
         )
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "segmentation")
 
         return recording_id
 
     except Exception as exc:
         logger.error("[%s] Segmentation failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "segmentation", str(exc))
         raise

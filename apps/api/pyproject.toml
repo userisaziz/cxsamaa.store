@@ -27,6 +27,9 @@ dependencies = [
     "torch>=2.4.0",
     "torchaudio>=2.4.0",
     "boto3>=1.35.0",
+    "deepgram-sdk>=3.7.0",  # Fallback STT provider
+    "tenacity>=8.2.0",  # Retry decorator for pipeline operations
+    "google-cloud-tasks>=2.16.0",  # Cloud Tasks for pipeline orchestration
 ]
 
 [project.optional-dependencies]

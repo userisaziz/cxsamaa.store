@@ -35,12 +35,18 @@ export default function OperationsLayout({
           <OperationsSidebar />
         </aside>
 
-        {/* Mobile sidebar drawer (< lg) */}
-        <MobileSidebar>
-          <OperationsSidebar />
-        </MobileSidebar>
+        {/* Mobile: top bar + drawer */}
+        <div className="flex flex-1 flex-col lg:hidden">
+          <MobileSidebar>
+            <OperationsSidebar />
+          </MobileSidebar>
+          <main className="flex-1 overflow-y-auto bg-surface-soft">
+            {children}
+          </main>
+        </div>
 
-        <main className="flex-1 overflow-y-auto bg-surface-soft">
+        {/* Desktop main content */}
+        <main className="hidden flex-1 overflow-y-auto bg-surface-soft lg:block">
           {children}
         </main>
       </div>

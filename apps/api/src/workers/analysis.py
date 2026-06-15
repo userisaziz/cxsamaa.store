@@ -8,7 +8,6 @@ from src.config import settings
 from src.models.conversation import Conversation, ConversationAnalysis
 from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment
-from src.workers.celery_app import celery_app
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -133,8 +132,11 @@ def _update_conversation_summary_sync(conversation_id: str, summary: str):
         session.commit()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="analyze_conversations")
-def analyze_conversations(self, recording_id: str) -> str:
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def analyze_conversations(recording_id: str) -> str:
     """Analyze all conversations in a recording using Llama 3.3 70B.
 
     For each conversation:
@@ -224,12 +226,18 @@ def analyze_conversations(self, recording_id: str) -> str:
             failed_count,
             len(conversations),
         )
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "analyze")
 
         return recording_id
 
     except Exception as exc:
         logger.error("[%s] Analysis failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "analyze", str(exc))
         raise

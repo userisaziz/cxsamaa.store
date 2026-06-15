@@ -1,10 +1,24 @@
+"""Celery app for local development task queue.
+
+Production uses Cloud Tasks, but Celery provides:
+- Process isolation (vs threading's shared memory)
+- Retry logic and failure handling
+- Task visibility via Flower
+- DB connection pool safety
+
+Start local worker:
+  celery -A src.workers.celery_app worker --loglevel=info --pool=solo
+"""
 from celery import Celery
 from sqlalchemy.orm import configure_mappers
 
 from src.config import settings
 
 # Import all models to register them with the mapper registry
-from src.models import brand, conversation, recording, salesperson, store, transcript, user, metrics
+from src.models import (
+    brand, conversation, recording,
+    salesperson, store, transcript, user, metrics,
+)
 
 # Configure relationships between all mapped models
 configure_mappers()
@@ -13,17 +27,7 @@ celery_app = Celery(
     "samaa",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=[
-        "src.workers.preprocessing",
-        "src.workers.transcription",
-        "src.workers.diarization",
-        "src.workers.turn_builder",
-        "src.workers.role_classification",
-        "src.workers.segmentation",
-        "src.workers.audio_stitcher",
-        "src.workers.analysis",
-        "src.workers.scoring",
-    ],
+    include=["src.workers.pipeline_worker"],
 )
 
 celery_app.conf.update(
@@ -33,12 +37,11 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    # acks_late + prefetch_multiplier=1 ensures chunk tasks are redelivered
-    # on worker crash. All chunk tasks are pure/idempotent (clear-and-reinsert).
+    # acks_late + prefetch_multiplier=1 ensures tasks are redelivered on worker crash.
+    # All pipeline tasks are idempotent (idempotency check at stage entry).
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    # Global limits serve as upper bounds; individual chunk tasks set their
-    # own tighter timeouts (transcribe_chunk=600s, diarize_chunk=1800s).
-    task_soft_time_limit=3600,  # 1 hour soft limit
-    task_time_limit=7200,  # 2 hour hard limit
+    # Global limits serve as upper bounds; individual tasks set their own tighter timeouts.
+    task_soft_time_limit=3600,   # 1 hour soft limit
+    task_time_limit=7200,        # 2 hour hard limit
 )

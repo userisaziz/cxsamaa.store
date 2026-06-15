@@ -99,3 +99,23 @@ class SpeakerRolesResponse(BaseModel):
     total_speakers: int = 0
     manually_corrected_count: int = 0
     primary_method: str | None = None  # Most common classification method
+
+
+class PresignedUploadRequest(BaseModel):
+    """Request to generate a pre-signed upload URL."""
+    filename: str
+    content_type: str
+    salesperson_id: str
+    recorded_at: str | None = None
+
+
+class PresignedUploadResponse(BaseModel):
+    """Response containing pre-signed upload URL."""
+    upload_url: str
+    recording_id: str
+    file_key: str
+
+
+class ConfirmUploadRequest(BaseModel):
+    """Request to confirm a direct-to-R2 upload."""
+    file_size: int | None = None

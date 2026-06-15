@@ -21,7 +21,6 @@ from urllib.parse import urlparse
 from src.config import settings
 from src.models.recording import Recording, RecordingStatus
 from src.storage.local import get_storage
-from src.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -134,11 +133,27 @@ def _store_chunk_manifest_sync(recording_id: str, manifest: dict) -> None:
 def _download_audio_sync_streaming(file_url: str, dest_path: str) -> None:
     """Stream download directly to disk — avoids loading entire file into RAM.
 
-    Works for both local file:// URLs and HTTP(S) pre-signed URLs.
-    For local paths the storage backend already handles this via read_bytes,
-    but for remote URLs this uses streaming to keep RAM at ~0 MB overhead.
+    Works for both local file:// URLs, HTTP(S) pre-signed URLs, and R2 storage keys.
+    For R2, uses boto3's native download_file for O(1) memory streaming.
+    For local paths, uses shutil.copyfileobj with 8 MB chunks.
+    For HTTP(S), uses requests with stream=True.
     """
     parsed = urlparse(file_url)
+
+    # R2 storage key (starts with "recordings/" or contains path separator without scheme)
+    if file_url.startswith("recordings/") or (parsed.scheme == "" and "/" in file_url):
+        storage = get_storage()
+        logger.info("Downloading from storage backend: %s", file_url)
+
+        # Use streaming download if available (R2/boto3), else fallback to bytes (Local)
+        if hasattr(storage, "download_file_sync"):
+            storage.download_file_sync(file_url, dest_path)
+        else:
+            # Fallback for backends that don't support streaming (e.g., LocalStorage)
+            audio_data = storage.download_sync(file_url)
+            with open(dest_path, "wb") as dst_f:
+                dst_f.write(audio_data)
+        return
 
     # Local file path — copy directly
     if parsed.scheme in ("", "file"):
@@ -530,8 +545,13 @@ def load_manifest(recording_id: str) -> dict:
 # Celery task
 # ---------------------------------------------------------------------------
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="preprocess_audio")
-def preprocess_audio(self, recording_id: str) -> str:
+from src.workers.retry import pipeline_retry
+
+
+# ---------------------------------------------------------------------------
+
+@pipeline_retry
+def preprocess_audio(recording_id: str) -> str:
     """Preprocess raw audio: convert to 16kHz mono WAV, normalize loudness,
     detect silence gaps, split into chunks, upload to storage.
 
@@ -557,7 +577,20 @@ def preprocess_audio(self, recording_id: str) -> str:
             # 1. Download source audio to disk (streaming — no RAM spike)
             # ------------------------------------------------------------------
             # Use DB format instead of parsing URL (avoids pre-signed URL query params)
-            ext = f".{recording.get('format', 'mp3').lower()}"
+            # Extract file extension from MIME type (e.g., "audio/mpeg" -> "mp3")
+            format_value = recording.get('format', 'mp3').lower()
+            # Map MIME types to file extensions
+            mime_to_ext = {
+                'audio/mpeg': 'mp3',
+                'audio/wav': 'wav',
+                'audio/x-wav': 'wav',
+                'audio/wave': 'wav',
+                'audio/mp4': 'm4a',
+                'audio/aac': 'aac',
+                'audio/ogg': 'ogg',
+                'audio/flac': 'flac',
+            }
+            ext = f".{mime_to_ext.get(format_value, format_value.split('/')[-1] if '/' in format_value else format_value)}"
             input_path = os.path.join(tmpdir, f"input{ext}")
             logger.info("[%s] Downloading %s → %s", recording_id, file_url, input_path)
             _download_audio_sync_streaming(file_url, input_path)
@@ -609,12 +642,18 @@ def preprocess_audio(self, recording_id: str) -> str:
                 "[%s] Preprocessing complete — duration: %ds, chunks: %d",
                 recording_id, duration_seconds, len(manifest["chunks"]),
             )
+            
+            # Mark stage complete in pipeline_state
+            from src.services.pipeline_state import mark_stage_complete_sync
+            mark_stage_complete_sync(recording_id, "preprocess")
 
         return recording_id
 
     except Exception as exc:
         logger.error("[%s] Preprocessing failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "preprocess", str(exc))
         raise

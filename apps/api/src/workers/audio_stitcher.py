@@ -1,21 +1,21 @@
 """Audio stitcher worker — Stage 6.5 of the pipeline.
 
 After segmentation identifies conversation boundaries, this task extracts
-each conversation's audio from the preprocessed full WAV and uploads it as
-a standalone file. This eliminates on-the-fly ffmpeg cuts at API request
+each conversation's audio from the ORIGINAL R2 master file using FFmpeg
+streaming (seek+cut). This eliminates on-the-fly ffmpeg cuts at API request
 time and enables clean per-conversation audio playback.
 
 Pipeline position:
     segment_conversations → stitch_conversation_audio → analyze_conversations
 
 The stitcher:
-    1. Loads the preprocessed 16kHz mono WAV (or falls back to the original file).
-    2. For each conversation, slices the audio between start_time and end_time.
-    3. Exports the slice as a WAV and uploads to storage.
+    1. Generates pre-signed URL for the original R2 master file.
+    2. For each conversation, uses FFmpeg to seek+cut from the remote URL.
+    3. Exports the slice as a WAV and uploads to R2.
     4. Updates the conversation.audio_url field with the storage key.
 
-If the preprocessed WAV is unavailable (e.g., already cleaned up for storage),
-the task falls back to ffmpeg-based extraction from the original upload.
+CRITICAL: Never downloads or re-creates the master file. Uses streaming
+extraction to keep memory at ~50MB regardless of recording length.
 """
 import logging
 import os
@@ -24,12 +24,9 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from pydub import AudioSegment
-
 from src.config import settings
 from src.models.conversation import Conversation
 from src.models.recording import Recording, RecordingStatus
-from src.workers.celery_app import celery_app
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -73,51 +70,45 @@ def _update_conversation_audio_url_sync(conversation_id: str, audio_url: str) ->
         session.commit()
 
 
-def _load_preprocessed_audio(recording_id: str) -> tuple[AudioSegment | None, str | None]:
-    """Try to load the preprocessed WAV from storage.
-
+def _get_master_file_source(recording_id: str, recording: dict) -> str | None:
+    """Get streaming source for the original master file.
+    
+    For R2 storage: generates pre-signed URL for HTTP streaming
+    For local storage: returns local file path
+    
     Returns:
-        (audio_segment, source_path) or (None, None) if unavailable.
+        URL or file path for FFmpeg input, or None if unavailable
     """
     from src.storage.local import get_storage
     storage = get_storage()
     is_local = hasattr(storage, "base_dir")
-
-    preprocessed_key = f"preprocessed/{recording_id}/audio.wav"
-
+    
     if is_local:
+        # Local storage: use direct file path
         base_dir = Path(settings.local_upload_dir)
-        preprocessed_path = base_dir / preprocessed_key
-
-        if preprocessed_path.exists():
-            try:
-                audio = AudioSegment.from_wav(str(preprocessed_path))
-                logger.info(
-                    "[%s] Loaded preprocessed WAV: %s (%ds)",
-                    recording_id, preprocessed_path, len(audio) // 1000,
-                )
-                return audio, str(preprocessed_path)
-            except Exception as e:
-                logger.warning("[%s] Failed to load preprocessed WAV: %s", recording_id, e)
+        original_path = base_dir / recording["file_url"]
+        if original_path.exists():
+            logger.info("[%s] Using local master file: %s", recording_id, original_path)
+            return str(original_path)
+        else:
+            logger.warning("[%s] Local master file not found: %s", recording_id, original_path)
+            return None
     else:
-        # Cloud storage — download to temp file
+        # R2 storage: generate pre-signed URL for HTTP streaming
         try:
-            audio_bytes = storage.download_sync(preprocessed_key)
-            import io
-            audio = AudioSegment.from_wav(io.BytesIO(audio_bytes))
+            file_key = recording["file_url"]
+            signed_url = storage.get_signed_url_sync(file_key, expires_in=3600)
             logger.info(
-                "[%s] Downloaded preprocessed WAV from cloud (%ds)",
-                recording_id, len(audio) // 1000,
+                "[%s] Generated pre-signed URL for R2 master: %s",
+                recording_id, file_key,
             )
-            # Return a temp path for ffmpeg fallback if needed
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp.write(audio_bytes)
-            tmp.close()
-            return audio, tmp.name
+            return signed_url
         except Exception as e:
-            logger.warning("[%s] Failed to download preprocessed WAV from cloud: %s", recording_id, e)
-
-    return None, None
+            logger.error(
+                "[%s] Failed to generate pre-signed URL for %s: %s",
+                recording_id, recording["file_url"], e,
+            )
+            return None
 
 
 def _extract_with_ffmpeg(
@@ -126,12 +117,19 @@ def _extract_with_ffmpeg(
     duration_sec: float,
     output_path: str,
 ) -> bool:
-    """Extract audio segment using ffmpeg subprocess. Fallback for non-WAV sources."""
+    """Extract audio segment using FFmpeg streaming from remote URL or local file.
+    
+    For R2 pre-signed URLs: uses HTTP streaming with -ss before -i for fast seek
+    For local files: direct file access
+    
+    Never downloads the full source file — only extracts the needed segment.
+    """
     try:
+        # Place -ss BEFORE -i for fast seek (avoids decoding from start)
         result = subprocess.run(
             [
                 "ffmpeg", "-y",
-                "-ss", str(start_sec),
+                "-ss", str(start_sec),  # Fast seek before input
                 "-i", source_path,
                 "-t", str(duration_sec),
                 "-ac", "1",
@@ -140,35 +138,46 @@ def _extract_with_ffmpeg(
                 output_path,
             ],
             capture_output=True,
-            timeout=120,
+            timeout=300,  # 5 minutes per conversation
             stdin=subprocess.DEVNULL,
             close_fds=True,
         )
-        return result.returncode == 0
+        
+        if result.returncode != 0:
+            logger.error(
+                "FFmpeg extraction failed:\nstdout: %s\nstderr: %s",
+                result.stdout.decode()[:500],
+                result.stderr.decode()[:1000],
+            )
+            return False
+        
+        return True
+        
     except (subprocess.TimeoutExpired, OSError) as e:
-        logger.error("ffmpeg extraction failed: %s", e)
+        logger.error("FFmpeg extraction failed: %s", e)
         return False
 
 
-@celery_app.task(
-    bind=True,
-    max_retries=3,
-    default_retry_delay=60,
-    soft_time_limit=600,
-    time_limit=900,
-    name="stitch_conversation_audio",
-)
-def stitch_conversation_audio(self, recording_id: str) -> str:
-    """Extract and store per-conversation audio files.
+from src.workers.retry import pipeline_retry
 
-    For each conversation identified by segmentation, slices the audio
-    from the preprocessed WAV and uploads it as a standalone file.
-    Updates conversation.audio_url with the storage key.
+
+@pipeline_retry
+def extract_conversation_audio(recording_id: str) -> str:
+    """Extract per-conversation audio files using FFmpeg streaming from R2.
+
+    For each conversation identified by segmentation, extracts audio
+    directly from the ORIGINAL R2 master file using FFmpeg seek+cut.
+    Never downloads or re-creates the master file.
+    
+    Updates conversation.audio_url with the R2 storage key.
+    
+    NOTE: Speaker reconciliation (metadata stitching) already happened
+    in the diarization stage. This is purely audio extraction for UI playback.
 
     Returns:
         recording_id for the next pipeline stage.
     """
-    logger.info("[%s] Starting conversation audio stitching", recording_id)
+    logger.info("[%s] Starting conversation audio extraction", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.STITCHING)
 
     try:
@@ -182,26 +191,17 @@ def stitch_conversation_audio(self, recording_id: str) -> str:
             return recording_id
 
         logger.info(
-            "[%s] Stitching audio for %d conversations", recording_id, len(conversations),
+            "[%s] Extracting audio for %d conversations", recording_id, len(conversations),
         )
 
-        # Try to load the preprocessed WAV for fast pydub slicing
-        audio, preprocessed_path = _load_preprocessed_audio(recording_id)
-
-        # Fallback source for ffmpeg extraction
-        fallback_source = None
-        if audio is None:
-            base_dir = Path(settings.local_upload_dir)
-            original_path = base_dir / recording["file_url"]
-            if original_path.exists():
-                fallback_source = str(original_path)
-            else:
-                logger.warning(
-                    "[%s] Neither preprocessed WAV nor original file available — "
-                    "audio stitching skipped",
-                    recording_id,
-                )
-                return recording_id
+        # Get streaming source for the original master file
+        master_source = _get_master_file_source(recording_id, recording)
+        if not master_source:
+            logger.error(
+                "[%s] Cannot extract audio — master file unavailable",
+                recording_id,
+            )
+            return recording_id
 
         from src.storage.local import get_storage
         storage = get_storage()
@@ -229,7 +229,7 @@ def stitch_conversation_audio(self, recording_id: str) -> str:
             output_filename = f"{conv_id}.wav"
             storage_key = f"preprocessed/{recording_id}/conversations/{output_filename}"
 
-            # For local storage, write to disk directly; for cloud, use temp file
+            # Use temp file for R2, direct path for local
             if is_local:
                 output_path = str(Path(settings.local_upload_dir) / storage_key)
             else:
@@ -237,34 +237,15 @@ def stitch_conversation_audio(self, recording_id: str) -> str:
                 tmp.close()
                 output_path = tmp.name
 
-            success = False
-
-            if audio is not None:
-                # Fast path: pydub slice from in-memory audio
-                try:
-                    start_ms = int(start_sec * 1000)
-                    end_ms = int(end_sec * 1000)
-                    # Clamp to audio length
-                    end_ms = min(end_ms, len(audio))
-                    conv_audio = audio[start_ms:end_ms]
-
-                    conv_audio.export(
-                        output_path,
-                        format="wav",
-                        parameters=["-ar", "16000", "-ac", "1"],
-                    )
-                    success = True
-                except Exception as e:
-                    logger.warning(
-                        "[%s] pydub slice failed for conversation %s: %s — trying ffmpeg",
-                        recording_id, conv_id, e,
-                    )
-
-            if not success and fallback_source:
-                # Slow path: ffmpeg extraction from original file
-                success = _extract_with_ffmpeg(
-                    fallback_source, start_sec, duration_sec, output_path,
-                )
+            # Extract using FFmpeg streaming (never downloads full file)
+            logger.info(
+                "[%s] Extracting conversation %s: %.1fs-%.1fs (%.1fs)",
+                recording_id, conv_id, start_sec, end_sec, duration_sec,
+            )
+            
+            success = _extract_with_ffmpeg(
+                master_source, start_sec, duration_sec, output_path,
+            )
 
             if not success:
                 logger.warning(
@@ -275,14 +256,14 @@ def stitch_conversation_audio(self, recording_id: str) -> str:
                     os.unlink(output_path)
                 continue
 
-            # Read the file and upload to storage
+            # Read the extracted file and upload to storage
             with open(output_path, "rb") as f:
                 audio_data = f.read()
 
-            # Upload to storage (local or cloud)
+            # Upload to storage (local or R2)
             storage.upload_sync(audio_data, storage_key)
 
-            # Clean up temp file for cloud storage
+            # Clean up temp file for R2
             if not is_local:
                 os.unlink(output_path)
 
@@ -291,32 +272,33 @@ def stitch_conversation_audio(self, recording_id: str) -> str:
             stitched_count += 1
 
             logger.info(
-                "[%s] Stitched conversation %s: %.1fs-%.1fs (%d bytes)",
+                "[%s] Extracted conversation %s: %.1fs-%.1fs (%d bytes)",
                 recording_id, conv_id, start_sec, end_sec, len(audio_data),
             )
 
-            # Clean up local file (storage has the copy)
-            try:
-                os.unlink(output_path)
-            except OSError:
-                pass
-
         logger.info(
-            "[%s] Audio stitching complete: %d/%d conversations stitched",
+            "[%s] Audio extraction complete: %d/%d conversations",
             recording_id, stitched_count, len(conversations),
         )
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "stitch")
 
         return recording_id
 
     except Exception as exc:
         logger.error(
-            "[%s] Audio stitching failed: %s", recording_id, exc, exc_info=True,
+            "[%s] Audio extraction failed: %s", recording_id, exc, exc_info=True,
         )
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
-        # Don't fail the pipeline for stitching errors — log and continue
+        # Don't fail the pipeline for extraction errors — log and continue
         logger.warning(
-            "[%s] Audio stitching failed after max retries — continuing pipeline",
+            "[%s] Audio extraction failed — continuing pipeline",
             recording_id,
         )
+        
+        # Still mark as complete (extraction is non-critical)
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "stitch")
+        
         return recording_id

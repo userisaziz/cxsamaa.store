@@ -1,0 +1,152 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/samaa-api:${_TAG}'
+      - '-f'
+      - 'apps/api/Dockerfile'
+      - '.'
+    dir: 'apps/api'
+    id: 'build-api'
+
+  # Build Worker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/samaa-worker:${_TAG}'
+      - '-f'
+      - 'apps/api/Dockerfile.worker'
+      - '.'
+    dir: 'apps/api'
+    id: 'build-worker'
+
+  # Build Frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/samaa-web:${_TAG}'
+      - '-f'
+      - 'apps/web/Dockerfile'
+      - '.'
+    dir: 'apps/web'
+    id: 'build-web'
+
+  # Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/samaa-api:${_TAG}']
+    waitFor: ['build-api']
+    id: 'push-api'
+
+  # Push Worker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/samaa-worker:${_TAG}']
+    waitFor: ['build-worker']
+    id: 'push-worker'
+
+  # Push Frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/samaa-web:${_TAG}']
+    waitFor: ['build-web']
+    id: 'push-web'
+
+  # Deploy API to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'samaa-api'
+      - '--image=gcr.io/$PROJECT_ID/samaa-api:${_TAG}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--port=8000'
+      - '--cpu=1'
+      - '--memory=1Gi'
+      - '--min-instances=0'
+      - '--max-instances=5'
+      - '--concurrency=50'
+      - '--timeout=300'
+      - '--set-env-vars=APP_ENV=production,APP_DEBUG=false'
+      - '--env-vars-file=apps/api/.env.prod'
+      - '--allow-unauthenticated'
+    waitFor: ['push-api']
+    id: 'deploy-api'
+
+  # Deploy Worker to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'samaa-worker'
+      - '--image=gcr.io/$PROJECT_ID/samaa-worker:${_TAG}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--port=8000'
+      - '--cpu=4'
+      - '--memory=8Gi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--concurrency=1'
+      - '--timeout=600'
+      - '--set-env-vars=APP_ENV=production,APP_DEBUG=false'
+      - '--env-vars-file=apps/api/.env.prod'
+      - '--no-allow-unauthenticated'
+    waitFor: ['push-worker']
+    id: 'deploy-worker'
+
+  # Deploy Frontend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'samaa-web'
+      - '--image=gcr.io/$PROJECT_ID/samaa-web:${_TAG}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--port=3000'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=5'
+      - '--concurrency=80'
+      - '--timeout=60'
+      - '--set-env-vars=NEXT_PUBLIC_API_URL=https://samaa-api-xxxxx-uc.a.run.app'
+      - '--env-vars-file=apps/web/.env.prod'
+      - '--allow-unauthenticated'
+    waitFor: ['push-web']
+    id: 'deploy-web'
+
+  # Run database migrations
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'samaa-migrations'
+      - '--image=gcr.io/$PROJECT_ID/samaa-api:${_TAG}'
+      - '--region=${_REGION}'
+      - '--args=alembic,upgrade,head'
+      - '--set-env-vars=APP_ENV=production'
+      - '--env-vars-file=apps/api/.env.prod'
+    waitFor: ['deploy-api']
+    id: 'migrate-db'
+
+substitutions:
+  _TAG: 'latest'
+  _REGION: 'us-central1'
+
+images:
+  - 'gcr.io/$PROJECT_ID/samaa-api:${_TAG}'
+  - 'gcr.io/$PROJECT_ID/samaa-worker:${_TAG}'
+  - 'gcr.io/$PROJECT_ID/samaa-web:${_TAG}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'

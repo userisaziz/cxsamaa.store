@@ -43,11 +43,19 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
-    # STT Provider (NVIDIA Riva)
+    # STT Provider (NVIDIA Riva with Deepgram fallback)
     stt_provider: str = "riva"  # STT provider (default: "riva")
+    stt_fallback_provider: str = "deepgram"  # Fallback STT when primary fails (default: "deepgram")
 
-    # DeepSeek LLM (V4)
-    llm_provider: str = "deepseek"  # "deepseek" or "nvidia"
+    # Deepgram STT (fallback provider)
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-3"  # Deepgram STT model (nova-3, nova-2, etc.)
+    deepgram_language: str = "en"  # Language code (en, hi, ar, etc.)
+    deepgram_timeout: int = 300  # 5 minutes per API call
+
+    # DeepSeek LLM (V4) with NVIDIA fallback
+    llm_provider: str = "deepseek"  # Primary LLM provider: "deepseek" or "nvidia"
+    llm_fallback_provider: str = "nvidia"  # Fallback LLM when primary fails (default: "nvidia")
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_llm_model: str = "deepseek-v4-flash"  # or "deepseek-v4-pro"
@@ -72,6 +80,18 @@ class Settings(BaseSettings):
     audio_chunk_duration_minutes: int = 10  # 10-minute chunks
     audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
     max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk
+
+    # GCP Cloud Run & Cloud Tasks
+    gcp_project: str = ""  # Set to your GCP project ID
+    gcp_region: str = "us-central1"  # Cloud Run region
+    worker_url: str = ""  # Set to https://samaa-worker-xxxxx-uc.a.run.app
+    gcp_worker_sa_email: str = ""  # Service account email for worker
+    pipeline_version: str = "v1"  # Pipeline version for message tracking
+    cloud_tasks_queue: str = "pipeline-queue"  # Cloud Tasks queue name
+    
+    # Celery (Local Development Only)
+    celery_broker_url: str = "redis://localhost:6379/0"  # Redis broker for Celery
+    celery_result_backend: str = "redis://localhost:6379/1"  # Redis backend for results
 
     # App
     app_env: str = "development"

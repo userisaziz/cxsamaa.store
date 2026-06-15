@@ -3,8 +3,6 @@ import io
 import logging
 import uuid
 
-from celery import chord, group
-from celery.exceptions import Ignore
 from pydub import AudioSegment
 
 from src.ai.stt import transcribe_audio
@@ -12,7 +10,6 @@ from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment
 from src.storage.local import get_storage
-from src.workers.celery_app import celery_app
 from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _get_recording_sync,
@@ -166,8 +163,13 @@ def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[
         logger.info("[%s] Stored %d transcript segments, %d words", recording_id, len(segments), len(words or []))
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="transcribe_audio")
-def transcribe_audio_task(self, recording_id: str) -> str:
+from concurrent.futures import ThreadPoolExecutor
+
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def transcribe_audio_task(recording_id: str) -> str:
     """Transcribe preprocessed audio using configured STT provider (Groq Whisper or NVIDIA Riva).
 
     Args:
@@ -236,29 +238,35 @@ def transcribe_audio_task(self, recording_id: str) -> str:
         _store_transcript_sync(recording_id, segments, words)
 
         logger.info("[%s] Transcription complete: %d segments", recording_id, len(segments))
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "stt")
+        
         return recording_id
 
     except PipelineHalted:
-        raise Ignore()
+        raise
     except Exception as exc:
         logger.error("[%s] Transcription failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "stt", str(exc))
         raise
 
 
 # ---------------------------------------------------------------------------
-# Parallel chunk tasks (dispatched via chord)
+# Parallel chunk dispatch (ThreadPoolExecutor replaces Celery chord)
 # ---------------------------------------------------------------------------
 
-@celery_app.task(bind=True, name="dispatch_transcription")
-def dispatch_transcription(self, recording_id: str):
+def dispatch_transcription(recording_id: str):
     """Dispatch parallel transcription chunk tasks or take fast path.
 
     Reads the chunk manifest produced by preprocessing. If the recording
-    is short enough, delegates to the existing single-task fast path.
-    Otherwise replaces itself with a chord of parallel chunk tasks.
+    is short enough, uses the fast path. Otherwise processes chunks in
+    parallel via ThreadPoolExecutor.
     """
     logger.info("[%s] Dispatching transcription", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
@@ -266,37 +274,38 @@ def dispatch_transcription(self, recording_id: str):
     manifest = load_manifest(recording_id)
 
     if not manifest["needs_chunking"]:
-        # Fast path: short recording, use existing task directly
-        try:
-            return transcribe_audio_task(recording_id)
-        except PipelineHalted:
-            raise Ignore()
+        # Fast path: short recording
+        return transcribe_audio_task(recording_id)
 
-    # Build parallel chunk group
-    header = group(
-        transcribe_chunk.s(
-            recording_id,
-            chunk["index"],
-            chunk["file"],
-        )
-        for chunk in manifest["chunks"]
-    )
-
+    # Parallel chunk processing
+    num_chunks = len(manifest["chunks"])
     logger.info(
-        "[%s] Dispatching %d parallel transcription chunks",
-        recording_id, len(manifest["chunks"]),
+        "[%s] Processing %d transcription chunks in parallel",
+        recording_id, num_chunks,
     )
 
-    # Replace self with chord: header runs in parallel, callback merges
-    raise self.replace(
-        chord(header, merge_transcription_results.s(recording_id))
-    )
+    with ThreadPoolExecutor(max_workers=min(num_chunks, 4)) as executor:
+        futures = [
+            executor.submit(
+                _transcribe_chunk_fn,
+                recording_id,
+                chunk["index"],
+                chunk["file"],
+            )
+            for chunk in manifest["chunks"]
+        ]
+        results = [f.result() for f in futures]
+
+    return merge_transcription_results(results, recording_id)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60,
-                 soft_time_limit=600, time_limit=900,
-                 name="transcribe_chunk")
-def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
+def _transcribe_chunk_fn(recording_id: str, chunk_index: int, chunk_file: str):
+    """Wrapper for transcribe_chunk that can be submitted to ThreadPoolExecutor."""
+    return transcribe_chunk(recording_id, chunk_index, chunk_file)
+
+
+@pipeline_retry
+def transcribe_chunk(recording_id: str, chunk_index: int, chunk_file: str):
     """Transcribe a single audio chunk. Idempotent with acks_late.
 
     Downloads only its own chunk file (~28MB for 15-min WAV) from storage,
@@ -348,11 +357,9 @@ def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str)
             "failed": False,
         }
     except Exception as exc:
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
-        # Return sentinel instead of raising — prevents chord error
+        # Return sentinel instead of raising — prevents chain error
         logger.error(
-            "[%s] Chunk %d failed permanently: %s",
+            "[%s] Chunk %d failed: %s",
             recording_id, chunk_index, exc,
         )
         return {
@@ -364,8 +371,7 @@ def transcribe_chunk(self, recording_id: str, chunk_index: int, chunk_file: str)
         }
 
 
-@celery_app.task(bind=True, name="merge_transcription_results")
-def merge_transcription_results(self, chunk_results: list, recording_id: str):
+def merge_transcription_results(chunk_results: list, recording_id: str):
     """Merge chunk transcription results, dedup overlaps, store to DB.
 
     Chord callback that receives a list of chunk result dicts.
