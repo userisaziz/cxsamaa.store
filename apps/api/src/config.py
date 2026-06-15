@@ -81,6 +81,18 @@ class Settings(BaseSettings):
     audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
     max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk
 
+    # GCP Cloud Run & Cloud Tasks
+    gcp_project: str = ""  # Set to your GCP project ID
+    gcp_region: str = "us-central1"  # Cloud Run region
+    worker_url: str = ""  # Set to https://samaa-worker-xxxxx-uc.a.run.app
+    gcp_worker_sa_email: str = ""  # Service account email for worker
+    pipeline_version: str = "v1"  # Pipeline version for message tracking
+    cloud_tasks_queue: str = "pipeline-queue"  # Cloud Tasks queue name
+    
+    # Celery (Local Development Only)
+    celery_broker_url: str = "redis://localhost:6379/0"  # Redis broker for Celery
+    celery_result_backend: str = "redis://localhost:6379/1"  # Redis backend for results
+
     # App
     app_env: str = "development"
     app_debug: bool = True

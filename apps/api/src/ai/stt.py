@@ -3,6 +3,7 @@
 STT Provider is configured via the STT_PROVIDER env var (default: "riva").
 Fallback provider is configured via STT_FALLBACK_PROVIDER env var (default: "deepgram").
 """
+import importlib
 import logging
 from typing import Any
 
@@ -10,78 +11,111 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Registry of all supported STT providers.
+# To add a new provider, add one line here — no other changes needed.
+PROVIDERS: dict[str, tuple[str, str, str]] = {
+    "riva":     ("src.ai.stt_riva",     "transcribe_audio_riva",     "NVIDIA Riva"),
+    "deepgram": ("src.ai.stt_deepgram", "transcribe_audio_deepgram", "Deepgram"),
+    "groq":     ("src.ai.stt_groq",     "transcribe_audio_groq",     "Groq Whisper"),
+}
+
+
+def _call_provider(key: str, audio_bytes: bytes, filename: str) -> tuple[dict[str, Any], str]:
+    """Dynamically load and call the transcription function for the given provider key.
+
+    Args:
+        key: Provider key (must exist in PROVIDERS)
+        audio_bytes: Raw audio data
+        filename: Filename hint for format detection
+
+    Returns:
+        Tuple of (transcription result dict, provider display name)
+
+    Raises:
+        KeyError: If key is not in PROVIDERS
+        Exception: Any exception raised by the provider's transcription function
+    """
+    module_path, func_name, display_name = PROVIDERS[key]
+    module = importlib.import_module(module_path)
+    transcribe_fn = getattr(module, func_name)
+    result = transcribe_fn(audio_bytes, filename)
+    return result, display_name
+
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> dict[str, Any]:
     """Transcribe audio using configured STT provider with automatic fallback.
 
     Primary: NVIDIA Riva Parakeet (gRPC)
-    Fallback: Deepgram (when Riva fails)
-
-    Returns:
-    {
-        "segments": [{"start": float, "end": float, "text": str}],
-        "words":    [{"word": str, "start": float, "end": float, "confidence": float}]
-    }
+    Fallback: Deepgram or Groq Whisper (when Riva fails)
 
     Args:
         audio_bytes: Raw audio data (16 kHz mono WAV recommended)
         filename: Filename hint for format detection
 
     Returns:
-        Dict with segments and words
-    """
-    logger.info("STT provider: %s (fallback: %s)", settings.stt_provider, settings.stt_fallback_provider)
+        {
+            "segments": [{"start": float, "end": float, "text": str}],
+            "words":    [{"word": str, "start": float, "end": float, "confidence": float}]
+        }
 
-    # Try primary provider (NVIDIA Riva)
+    Raises:
+        ValueError: If the configured primary provider is unknown
+        RuntimeError: If both primary and fallback providers fail
+    """
+    primary = settings.stt_provider
+    fallback = settings.stt_fallback_provider
+
+    logger.info("STT provider: %s (fallback: %s)", primary, fallback)
+
+    if primary not in PROVIDERS:
+        raise ValueError(
+            f"Unknown STT provider: '{primary}'. Valid options: {list(PROVIDERS)}"
+        )
+
+    # --- Try primary provider ---
+    primary_error: Exception | None = None
     try:
-        from src.ai.stt_riva import transcribe_audio_riva
-        logger.info("Attempting transcription with NVIDIA Riva")
-        result = transcribe_audio_riva(audio_bytes, filename)
-        logger.info("NVIDIA Riva transcription successful")
+        result, primary_name = _call_provider(primary, audio_bytes, filename)
+        logger.info("%s transcription successful", primary_name)
         return result
     except Exception as e:
+        _, _, primary_name = PROVIDERS[primary]
         logger.warning(
-            "NVIDIA Riva STT failed: %s. Attempting fallback to %s...",
-            e, settings.stt_fallback_provider
+            "%s STT failed: %s. Attempting fallback: %s",
+            primary_name, e, fallback,
         )
-        
-        # Try fallback provider
-        return _try_fallback(audio_bytes, filename, e)
+        primary_error = e
 
-
-def _try_fallback(audio_bytes: bytes, filename: str, primary_error: Exception) -> dict[str, Any]:
-    """Attempt transcription with fallback provider.
-    
-    Args:
-        audio_bytes: Raw audio data
-        filename: Filename hint
-        primary_error: The exception from the primary provider
-        
-    Returns:
-        Dict with segments and words from fallback provider
-        
-    Raises:
-        Exception: If fallback also fails, raises combined error
-    """
-    fallback_provider = settings.stt_fallback_provider
-    
-    if fallback_provider == "deepgram":
-        try:
-            from src.ai.stt_deepgram import transcribe_audio_deepgram
-            logger.info("Attempting fallback transcription with Deepgram")
-            result = transcribe_audio_deepgram(audio_bytes, filename)
-            logger.info("Deepgram fallback transcription successful")
-            return result
-        except Exception as fallback_error:
-            logger.error(
-                "Deepgram fallback also failed: %s. Primary error: %s",
-                fallback_error, primary_error
-            )
-            raise RuntimeError(
-                f"All STT providers failed. Primary (Riva): {primary_error}. "
-                f"Fallback (Deepgram): {fallback_error}"
-            ) from fallback_error
-    else:
-        # No valid fallback configured, re-raise primary error
-        logger.error("No valid fallback STT provider configured: %s", fallback_provider)
+    # --- Validate fallback ---
+    if not fallback:
+        logger.error("No fallback STT provider configured.")
         raise primary_error
+
+    if fallback not in PROVIDERS:
+        logger.error("Unknown fallback STT provider: '%s'. Raising primary error.", fallback)
+        raise primary_error
+
+    if fallback == primary:
+        logger.warning(
+            "Fallback provider '%s' is the same as primary — skipping to avoid retry loop.",
+            fallback,
+        )
+        raise primary_error
+
+    # --- Try fallback provider ---
+    try:
+        result, fallback_name = _call_provider(fallback, audio_bytes, filename)
+        logger.info("%s fallback transcription successful", fallback_name)
+        return result
+    except Exception as fallback_error:
+        _, _, primary_name = PROVIDERS[primary]
+        _, _, fallback_name = PROVIDERS[fallback]
+        logger.error(
+            "Fallback %s also failed: %s. Primary error (%s): %s",
+            fallback_name, fallback_error, primary_name, primary_error,
+        )
+        raise RuntimeError(
+            f"All STT providers failed. "
+            f"Primary ({primary_name}): {primary_error}. "
+            f"Fallback ({fallback_name}): {fallback_error}"
+        ) from fallback_error

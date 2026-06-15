@@ -2,13 +2,11 @@
 import logging
 import uuid
 
-from celery.exceptions import Ignore
 
 from src.ai.role_classifier import classify_speaker_roles
 from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import ConversationTurn, SpeakerRole
-from src.workers.celery_app import celery_app
 from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _get_recording_sync,
@@ -75,8 +73,11 @@ def _store_role_classifications_sync(recording_id: str, classifications: dict):
         logger.info("[%s] Stored %d role classifications", recording_id, len(classifications))
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="classify_speaker_roles")
-def classify_speaker_roles_task(self, recording_id: str) -> str:
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def classify_speaker_roles(recording_id: str) -> str:
     """Classify speaker roles as Salesperson or Customer.
 
     Uses LLM-based classification (primary) with heuristic fallback.
@@ -125,13 +126,20 @@ def classify_speaker_roles_task(self, recording_id: str) -> str:
             recording_id,
             len(classifications),
         )
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "roles")
+        
         return recording_id
 
     except PipelineHalted:
-        raise Ignore()
+        raise
     except Exception as exc:
         logger.error("[%s] Role classification failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "roles", str(exc))
         raise

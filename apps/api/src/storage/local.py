@@ -23,6 +23,10 @@ class LocalStorage(StorageBackend):
     async def get_signed_url(self, path: str, expires_in: int = 900) -> str:
         return str(self.base_dir / path)
 
+    async def generate_presigned_upload_url(self, key: str, content_type: str, expires_in: int = 3600) -> str:
+        # Local storage doesn't support presigned URLs; return the file path for direct write
+        return str(self.base_dir / key)
+
     # --- Sync methods (used by Celery workers) ---
 
     def upload_sync(self, file_data: bytes, destination: str) -> str:
@@ -39,6 +43,10 @@ class LocalStorage(StorageBackend):
         file_path = self.base_dir / path
         if file_path.exists():
             file_path.unlink()
+
+    def generate_presigned_upload_url_sync(self, key: str, content_type: str, expires_in: int = 3600) -> str:
+        # Local storage doesn't support presigned URLs; return the file path for direct write
+        return str(self.base_dir / key)
 
 
 def get_storage() -> StorageBackend:

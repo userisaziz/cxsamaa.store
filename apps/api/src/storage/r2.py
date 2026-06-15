@@ -71,6 +71,25 @@ class R2Storage(StorageBackend):
             logger.error("Failed to generate signed URL for %s: %s", path, e)
             raise
 
+    async def generate_presigned_upload_url(self, key: str, content_type: str, expires_in: int = 3600) -> str:
+        """Generate pre-signed PUT URL for direct browser-to-R2 upload."""
+        try:
+            # Don't include ContentType in signature - let browser set it
+            # This avoids CORS preflight issues
+            url = self.client.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": self.bucket,
+                    "Key": key,
+                },
+                ExpiresIn=expires_in,
+            )
+            logger.info("Generated presigned upload URL for %s (valid %ds)", key, expires_in)
+            return url
+        except ClientError as e:
+            logger.error("Failed to generate presigned upload URL for %s: %s", key, e)
+            raise
+
     # --- Sync methods (used by Celery workers) ---
 
     def upload_sync(self, file_data: bytes, destination: str) -> str:
@@ -107,6 +126,19 @@ class R2Storage(StorageBackend):
             logger.error("Failed to download from R2 %s: %s", source, e)
             raise
 
+    def download_file_sync(self, source: str, dest_path: str) -> None:
+        """Stream download from R2 directly to disk (O(1) memory).
+
+        Uses boto3's native download_file which handles multipart streaming
+        directly to the filesystem without loading the file into Python RAM.
+        """
+        try:
+            self.client.download_file(self.bucket, source, dest_path)
+            logger.debug("Streamed %s from R2 to %s", source, dest_path)
+        except ClientError as e:
+            logger.error("Failed to stream download from R2 %s: %s", source, e)
+            raise
+
     def delete_sync(self, path: str) -> None:
         """Delete file from R2."""
         try:
@@ -131,6 +163,24 @@ class R2Storage(StorageBackend):
             return url
         except ClientError as e:
             logger.error("Failed to generate signed URL for %s: %s", path, e)
+            raise
+
+    def generate_presigned_upload_url_sync(self, key: str, content_type: str, expires_in: int = 3600) -> str:
+        """Sync variant for generating presigned upload URLs."""
+        try:
+            # Don't include ContentType in signature - let browser set it
+            url = self.client.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": self.bucket,
+                    "Key": key,
+                },
+                ExpiresIn=expires_in,
+            )
+            logger.info("Generated presigned upload URL for %s (valid %ds)", key, expires_in)
+            return url
+        except ClientError as e:
+            logger.error("Failed to generate presigned upload URL for %s: %s", key, e)
             raise
 
     # --- Helpers ---

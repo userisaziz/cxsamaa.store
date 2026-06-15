@@ -9,7 +9,6 @@ from src.models.conversation import Conversation, ConversationAnalysis
 from src.models.metrics import DailyMetrics
 from src.models.recording import Recording, RecordingStatus
 from src.models.transcript import TranscriptSegment
-from src.workers.celery_app import celery_app
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -213,8 +212,11 @@ def _upsert_daily_metrics(session, entity_id, entity_type: str, date_val):
         session.add(dm)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="score_salesperson")
-def score_salesperson(self, recording_id: str) -> str:
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def score_salesperson(recording_id: str) -> str:
     """Score salesperson performance across 5 dimensions for each conversation.
 
     After scoring:
@@ -284,11 +286,18 @@ def score_salesperson(self, recording_id: str) -> str:
             scored_count,
             len(conversations),
         )
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "scoring")
+        
         return recording_id
 
     except Exception as exc:
         logger.error("[%s] Scoring failed: %s", recording_id, exc, exc_info=True)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "scoring", str(exc))
         raise

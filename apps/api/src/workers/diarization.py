@@ -3,8 +3,6 @@ import logging
 import uuid
 from collections import Counter
 
-from celery import chord, group
-from celery.exceptions import Ignore
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -14,7 +12,6 @@ from src.config import settings
 from src.models.recording import RecordingStatus
 from src.models.transcript import TranscriptSegment, WordTranscript
 from src.storage.local import get_storage
-from src.workers.celery_app import celery_app
 from src.workers.pipeline_control import PipelineHalted, fail_and_halt
 from src.workers.preprocessing import (
     _get_recording_sync,
@@ -94,8 +91,13 @@ def _update_speaker_labels_sync(recording_id: str, labeled_segments: list[dict])
     )
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="diarize_audio")
-def diarize_audio(self, recording_id: str) -> str:
+from concurrent.futures import ThreadPoolExecutor
+
+from src.workers.retry import pipeline_retry
+
+
+@pipeline_retry
+def diarize_audio(recording_id: str) -> str:
     """Diarize speakers using pyannote.audio (primary) or NVIDIA NeMo (fallback).
 
     Pyannote.audio provides superior accuracy for multilingual retail sales audio:
@@ -141,40 +143,35 @@ def diarize_audio(self, recording_id: str) -> str:
 
         speaker_counts = Counter(seg["speaker"] for seg in labeled_segments)
         logger.info("[%s] Speaker distribution: %s", recording_id, dict(speaker_counts))
+        
+        # Mark stage complete in pipeline_state
+        from src.services.pipeline_state import mark_stage_complete_sync
+        mark_stage_complete_sync(recording_id, "diarization")
 
         return recording_id
 
     except PipelineHalted:
-        raise Ignore()
+        raise
     except Exception as exc:
         logger.error("[%s] Diarization failed: %s", recording_id, exc, exc_info=True)
-
-        # FIX 3: only retry while attempts remain; on the final failure
-        # update status to FAILED and re-raise the original exception so
-        # callers see the real error, not MaxRetriesExceededError.
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
-
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
+        
+        # Mark stage failed in pipeline_state
+        from src.services.pipeline_state import mark_stage_failed_sync
+        mark_stage_failed_sync(recording_id, "diarization", str(exc))
         raise
 
 
 # ---------------------------------------------------------------------------
-# Parallel chunk tasks (dispatched via chord)
+# Parallel chunk dispatch (ThreadPoolExecutor replaces Celery chord)
 # ---------------------------------------------------------------------------
 
-@celery_app.task(bind=True, name="dispatch_diarization")
-def dispatch_diarization(self, recording_id: str):
+def dispatch_diarization(recording_id: str):
     """Dispatch parallel diarization chunk tasks or take fast path.
 
     Reads the chunk manifest produced by preprocessing. If the recording
-    is short enough, delegates to the existing single-task fast path.
-    Otherwise replaces itself with a chord of parallel chunk tasks.
-
-    Since chunks are split at silence-gap boundaries (conversation
-    boundaries), cross-chunk speaker reconciliation is applied after
-    merging to unify speaker labels across chunks using Agglomerative
-    Clustering on speaker embeddings.
+    is short enough, uses the fast path. Otherwise processes chunks in
+    parallel via ThreadPoolExecutor.
     """
     logger.info("[%s] Dispatching diarization", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.DIARIZING)
@@ -182,37 +179,38 @@ def dispatch_diarization(self, recording_id: str):
     manifest = load_manifest(recording_id)
 
     if not manifest["needs_chunking"]:
-        # Fast path: short recording, use existing task directly
-        try:
-            return diarize_audio(recording_id)
-        except PipelineHalted:
-            raise Ignore()
+        # Fast path: short recording
+        return diarize_audio(recording_id)
 
-    # Build parallel chunk group
-    header = group(
-        diarize_chunk.s(
-            recording_id,
-            chunk["index"],
-            chunk["file"],
-        )
-        for chunk in manifest["chunks"]
-    )
-
+    # Parallel chunk processing
+    num_chunks = len(manifest["chunks"])
     logger.info(
-        "[%s] Dispatching %d parallel diarization chunks",
-        recording_id, len(manifest["chunks"]),
+        "[%s] Processing %d diarization chunks in parallel",
+        recording_id, num_chunks,
     )
 
-    # Replace self with chord: header runs in parallel, callback merges
-    raise self.replace(
-        chord(header, merge_diarization_results.s(recording_id))
-    )
+    with ThreadPoolExecutor(max_workers=min(num_chunks, 4)) as executor:
+        futures = [
+            executor.submit(
+                _diarize_chunk_fn,
+                recording_id,
+                chunk["index"],
+                chunk["file"],
+            )
+            for chunk in manifest["chunks"]
+        ]
+        results = [f.result() for f in futures]
+
+    return merge_diarization_results(results, recording_id)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120,
-                 soft_time_limit=1800, time_limit=2400,
-                 name="diarize_chunk")
-def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
+def _diarize_chunk_fn(recording_id: str, chunk_index: int, chunk_file: str):
+    """Wrapper for diarize_chunk that can be submitted to ThreadPoolExecutor."""
+    return diarize_chunk(recording_id, chunk_index, chunk_file)
+
+
+@pipeline_retry
+def diarize_chunk(recording_id: str, chunk_index: int, chunk_file: str):
     """Diarize a single audio chunk. Idempotent with acks_late.
 
     Downloads only its own chunk file from storage.
@@ -240,11 +238,9 @@ def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
             "failed": False,
         }
     except Exception as exc:
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc)
-        # Return sentinel instead of raising — prevents chord error
+        # Return sentinel instead of raising — prevents chain error
         logger.error(
-            "[%s] Diarization chunk %d failed permanently: %s",
+            "[%s] Diarization chunk %d failed: %s",
             recording_id, chunk_index, exc,
         )
         return {
@@ -255,8 +251,7 @@ def diarize_chunk(self, recording_id: str, chunk_index: int, chunk_file: str):
         }
 
 
-@celery_app.task(bind=True, name="merge_diarization_results")
-def merge_diarization_results(self, chunk_results: list, recording_id: str):
+def merge_diarization_results(chunk_results: list, recording_id: str):
     """Merge diarization results from all chunks and assign speaker labels.
 
     Chord callback that receives a list of chunk result dicts.

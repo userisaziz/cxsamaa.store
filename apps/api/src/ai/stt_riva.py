@@ -3,9 +3,10 @@
 Only used when STT_PROVIDER=riva. Requires riva-client to be installed.
 """
 import logging
-import tempfile
 from typing import Any
 
+import grpc
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import riva.client
 import riva.client.proto.riva_asr_pb2 as rasr
 import riva.client.proto.riva_asr_pb2_grpc as rasr_srv
@@ -17,19 +18,22 @@ logger = logging.getLogger(__name__)
 
 
 class RivaSTTClient:
-    """gRPC client for NVIDIA Riva Parakeet ASR model."""
+    """gRPC client for NVIDIA Riva Parakeet Multilingual ASR model."""
 
     def __init__(self):
         self.server = "grpc.nvcf.nvidia.com:443"
         self.api_key = settings.nvidia_api_key
-        self.function_id = "71203149-d3b7-4460-8231-1be2543a1fca"  # Parakeet 1.1b RNNT
-        self.use_ssl = True
-
+        self.function_id = "71203149-d3b7-4460-8231-1be2543a1fca"  # Parakeet 1.1b RNNT Multilingual
+        
         # Build metadata for gRPC calls
         self.metadata = [
             ("function-id", self.function_id),
             ("authorization", f"Bearer {self.api_key}"),
         ]
+        
+        # Initialize channel lazily — created once, reused across all chunks
+        self._channel = None
+        self._stub = None
 
     @staticmethod
     def _to_seconds(t) -> float:
@@ -48,6 +52,41 @@ class RivaSTTClient:
             return t / 1000.0
         return float(t)
 
+    def _get_stub(self):
+        """Create or reuse the gRPC channel and stub.
+        
+        CRITICAL: Creates channel once with 100MB payload limit to prevent
+        segfaults on large audio chunks (15-min WAV ≈ 28MB).
+        """
+        if self._channel is None:
+            # CRITICAL FIX: Increase payload limits to 100MB for 15-min audio chunks
+            options = [
+                ('grpc.max_send_message_length', 100 * 1024 * 1024),  # 100MB
+                ('grpc.max_receive_message_length', 100 * 1024 * 1024),  # 100MB
+            ]
+            credentials = grpc.ssl_channel_credentials()
+            self._channel = grpc.secure_channel(self.server, credentials, options=options)
+            self._stub = rasr_srv.RivaSpeechRecognitionStub(self._channel)
+            logger.info("Initialized persistent Riva gRPC channel (100MB limit)")
+            
+        return self._stub
+
+    def _reset_channel(self):
+        """Safely close and nullify the channel so _get_stub rebuilds it on retry."""
+        if self._channel:
+            try:
+                self._channel.close()
+            except Exception:
+                pass
+        self._channel = None
+        self._stub = None
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        retry=retry_if_exception_type((grpc.RpcError, ConnectionError, TimeoutError)),
+        reraise=True,
+    )
     def transcribe_audio(self, audio_bytes: bytes) -> dict[str, Any]:
         """Transcribe audio using NVIDIA Riva Parakeet model via gRPC.
 
@@ -61,62 +100,43 @@ class RivaSTTClient:
                 "words": [{word, start, end, confidence}]
             }
         """
-        logger.info(f"Sending audio to Riva gRPC STT ({len(audio_bytes)} bytes)")
-
-        # Write audio bytes to temp file for gRPC client
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
+        logger.info(f"Sending audio to Riva gRPC STT ({len(audio_bytes) / (1024*1024):.1f} MB)")
 
         try:
-            # Create gRPC channel with SSL
-            import grpc
-            if self.use_ssl:
-                credentials = grpc.ssl_channel_credentials()
-                channel = grpc.secure_channel(self.server, credentials)
-            else:
-                channel = grpc.insecure_channel(self.server)
+            stub = self._get_stub()
 
-            # Create ASR service stub
-            asr_service = rasr_srv.RivaSpeechRecognitionStub(channel)
-
-            # Read audio file
-            with open(tmp_path, "rb") as f:
-                audio_data = f.read()
-
-            # Build recognition config
+            # Build recognition config — use "multi" for multilingual auto-detect
             config = rasr.RecognitionConfig(
                 encoding=raudio.AudioEncoding.LINEAR_PCM,  # 16-bit PCM
                 sample_rate_hertz=16000,  # 16kHz
                 audio_channel_count=1,  # Mono
-                language_code="en-US",  # Default to US English
+                language_code="multi",  # Multilingual auto-detect (Hindi/Arabic/English)
                 max_alternatives=1,
                 profanity_filter=False,
                 enable_automatic_punctuation=True,
                 enable_word_time_offsets=True,  # Required for segment timestamps
             )
 
-            # Build recognition request
-            request = rasr.RecognizeRequest(
-                config=config,
-                audio=audio_data,  # Raw bytes directly
-            )
+            # CRITICAL FIX: Pass bytes directly — NO temp files, NO disk I/O
+            request = rasr.RecognizeRequest(config=config, audio=audio_bytes)
 
-            # Make gRPC call with metadata
-            response = asr_service.Recognize(request, metadata=self.metadata)
+            # Make gRPC call with metadata and timeout
+            response = stub.Recognize(
+                request,
+                metadata=self.metadata,
+                timeout=300,  # 5 minutes max per chunk
+            )
 
             return self._parse_riva_response(response)
 
-        except Exception as e:
-            logger.error(f"Riva gRPC STT failed: {e}")
+        except grpc.RpcError as e:
+            logger.error(f"Riva gRPC error: {e.code()} - {e.details()}. Resetting channel for retry.")
+            # Force channel recreation on next retry in case the C++ socket is corrupted
+            self._reset_channel()
             raise
-        finally:
-            # Clean up temp file
-            import os
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        except Exception as e:
+            logger.error(f"Riva gRPC STT unexpected failure: {e}")
+            raise
 
     def _parse_riva_response(self, response) -> dict[str, Any]:
         """Parse Riva gRPC response into standardized segment and word format.

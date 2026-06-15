@@ -60,7 +60,8 @@ require_store_manager_up = RoleChecker([
 require_salesperson_up = RoleChecker([
     UserRole.SUPER_ADMIN, UserRole.BRAND_ADMIN, UserRole.STORE_MANAGER, UserRole.SALESPERSON
 ])
+# Pipeline control - OPERATOR and SUPER_ADMIN only (not BRAND_ADMIN)
 require_operator = RoleChecker([UserRole.OPERATOR])
 require_operator_up = RoleChecker([
-    UserRole.SUPER_ADMIN, UserRole.BRAND_ADMIN, UserRole.OPERATOR
+    UserRole.SUPER_ADMIN, UserRole.OPERATOR
 ])

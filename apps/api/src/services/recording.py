@@ -142,8 +142,9 @@ async def upload_recording(
     await db.refresh(recording)
     
     # Start processing pipeline
-    from src.workers.pipeline import start_processing_pipeline
-    start_processing_pipeline(str(recording.id))
+    from src.workers.pipeline import enqueue_first_stage
+    from src.config import settings
+    enqueue_first_stage(str(recording.id), settings.pipeline_version)
     
     return recording
 
@@ -168,8 +169,9 @@ async def reprocess_recording(db: AsyncSession, recording: Recording) -> Recordi
     await db.refresh(recording)
     
     # Restart pipeline
-    from src.workers.pipeline import start_processing_pipeline
-    start_processing_pipeline(str(recording.id))
+    from src.workers.pipeline import enqueue_first_stage
+    from src.config import settings
+    enqueue_first_stage(str(recording.id), settings.pipeline_version)
     
     return recording
 
