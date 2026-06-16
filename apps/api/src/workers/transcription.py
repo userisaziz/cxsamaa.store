@@ -1,6 +1,7 @@
 """Speech-to-text worker — transcribes audio using NVIDIA Parakeet STT."""
 import io
 import logging
+import time
 import uuid
 
 from pydub import AudioSegment
@@ -19,6 +20,116 @@ from src.workers.preprocessing import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _transcribe_with_retry(
+    audio_data: bytes,
+    recording_id: str,
+    chunk_index: int,
+    max_retries: int = 3,
+    initial_wait: float = 2.0,
+    max_wait: float = 60.0,
+) -> dict:
+    """Transcribe audio with exponential backoff retry for timeout errors.
+
+    Implements chunk-level retry logic specifically for timeout errors
+    (e.g., Deepgram "write operation timed out"). Retries with increasing
+    wait times before giving up.
+
+    After all retries are exhausted, attempts an alternative STT provider
+    if primary == fallback (to avoid retry loops).
+
+    Args:
+        audio_data: Raw audio bytes
+        recording_id: Recording UUID
+        chunk_index: Chunk index for logging
+        max_retries: Maximum retry attempts (default: 3)
+        initial_wait: Initial wait time in seconds (default: 2.0)
+        max_wait: Maximum wait time in seconds (default: 60.0)
+
+    Returns:
+        Transcription result dict with "segments" and "words"
+
+    Raises:
+        Exception: If all retries fail
+    """
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                logger.info(
+                    "[%s] Chunk %d: Retry attempt %d/%d after timeout",
+                    recording_id, chunk_index, attempt, max_retries,
+                )
+
+            result = transcribe_audio(audio_data)
+            if attempt > 0:
+                logger.info(
+                    "[%s] Chunk %d: Retry %d succeeded",
+                    recording_id, chunk_index, attempt,
+                )
+            return result
+
+        except Exception as exc:
+            last_error = exc
+            error_msg = str(exc).lower()
+
+            # Check if this is a timeout error (worth retrying)
+            is_timeout = any(
+                keyword in error_msg
+                for keyword in ["timeout", "timed out", "deadline exceeded"]
+            )
+
+            if not is_timeout or attempt >= max_retries:
+                # Not a timeout or out of retries — give up
+                logger.error(
+                    "[%s] Chunk %d: STT failed on attempt %d: %s",
+                    recording_id, chunk_index, attempt, exc,
+                )
+                
+                # ✅ FIX: After retries exhausted, try alternative provider if primary == fallback
+                if attempt >= max_retries and settings.stt_fallback_provider == settings.stt_provider:
+                    from src.ai.stt import PROVIDERS
+                    available = [p for p in PROVIDERS if p != settings.stt_provider]
+                    if available:
+                        alternative = available[0]
+                        logger.info(
+                            "[%s] Chunk %d: All retries exhausted, trying alternative provider: %s",
+                            recording_id, chunk_index, alternative,
+                        )
+                        try:
+                            from src.ai.stt import _call_provider
+                            result, alt_name = _call_provider(alternative, audio_data, "audio.wav")
+                            logger.info(
+                                "[%s] Chunk %d: Alternative provider %s succeeded",
+                                recording_id, chunk_index, alt_name,
+                            )
+                            return result
+                        except Exception as alt_error:
+                            logger.error(
+                                "[%s] Chunk %d: Alternative provider also failed: %s",
+                                recording_id, chunk_index, alt_error,
+                            )
+                            # Fall through to raise the original error
+                
+                raise
+
+            # Calculate exponential backoff with jitter
+            wait_time = min(
+                initial_wait * (2 ** attempt),
+                max_wait,
+            )
+            # Add small jitter to prevent thundering herd
+            import random
+            jitter = random.uniform(0, 0.1 * wait_time)
+            wait_time += jitter
+
+            logger.warning(
+                "[%s] Chunk %d: Timeout on attempt %d, retrying in %.1fs: %s",
+                recording_id, chunk_index, attempt, wait_time, exc,
+            )
+            time.sleep(wait_time)
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +448,8 @@ def transcribe_chunk(recording_id: str, chunk_index: int, chunk_file: str):
                 )
                 chunk_data = filtered_data
 
-        result = transcribe_audio(chunk_data)
+        # Retry STT with exponential backoff for timeout errors
+        result = _transcribe_with_retry(chunk_data, recording_id, chunk_index)
         segments = result.get("segments", [])
         words = result.get("words", [])
 
@@ -394,6 +506,23 @@ def merge_transcription_results(chunk_results: list, recording_id: str):
 
     if not successful:
         fail_and_halt(recording_id, "All transcription chunks failed")
+
+    # Check if we have enough successful chunks to continue
+    total_chunks = len(chunk_results)
+    success_rate = len(successful) / total_chunks if total_chunks > 0 else 0
+    
+    if success_rate < 0.5:
+        # Less than 50% success rate — halt the pipeline
+        fail_and_halt(
+            recording_id,
+            f"Too many transcription chunks failed ({len(failed)}/{total_chunks}, success rate: {success_rate:.0%})"
+        )
+    
+    if success_rate < 1.0:
+        logger.warning(
+            "[%s] Continuing with partial transcript: %d/%d chunks successful (%.0%% success rate)",
+            recording_id, len(successful), total_chunks, success_rate * 100,
+        )
 
     # Load manifest to get chunk offsets
     manifest = load_manifest(recording_id)

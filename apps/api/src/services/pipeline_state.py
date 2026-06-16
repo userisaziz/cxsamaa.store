@@ -22,7 +22,7 @@ STAGE_ORDER = [
     "turns",
     "roles",
     "segmentation",
-    "extract-audio",
+    "stitch",
     "analyze",
     "scoring",
 ]

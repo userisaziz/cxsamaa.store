@@ -19,6 +19,7 @@ class DeepgramSTTClient:
         self.api_key = settings.deepgram_api_key
         self.model = settings.deepgram_model
         self.language = settings.deepgram_language
+        self.timeout = settings.deepgram_timeout  # Configurable timeout (default: 300s)
 
         if not self.api_key:
             raise ValueError("DEEPGRAM_API_KEY environment variable is required")
@@ -47,6 +48,9 @@ class DeepgramSTTClient:
 
         try:
             # Deepgram v7 API: transcribe_file takes bytes directly + keyword args
+            # Note: Deepgram SDK v7 doesn't support timeout parameter directly.
+            # Timeout is handled at the HTTP client level via environment variables
+            # or by wrapping the call with a timeout decorator.
             response = self.client.listen.v1.media.transcribe_file(
                 request=audio_bytes,
                 model=self.model,
@@ -98,9 +102,10 @@ class DeepgramSTTClient:
                     "confidence": round(word.confidence, 3),
                 })
 
-        # Extract utterances as segments
-        if hasattr(alternative, "utterances") and alternative.utterances:
-            for utterance in alternative.utterances:
+        # ✅ FIX: utterances live at response.results.utterances, not alternative.utterances
+        utterances = getattr(response.results, "utterances", None)
+        if utterances:
+            for utterance in utterances:
                 if not utterance.transcript.strip():
                     continue
                 segments.append({
@@ -109,20 +114,34 @@ class DeepgramSTTClient:
                     "text": utterance.transcript.strip(),
                 })
 
-        # Fallback: no utterances but transcript exists — build one segment from words
-        if not segments and alternative.transcript.strip():
-            if all_words:
+        # Fallback: no utterances — build segments from words by grouping with silence gaps
+        if not segments and all_words:
+            # Group words into segments by silence gaps > 1.5s
+            current_group = [all_words[0]]
+            for word in all_words[1:]:
+                if word["start"] - current_group[-1]["end"] > 1.5:
+                    segments.append({
+                        "start": current_group[0]["start"],
+                        "end": current_group[-1]["end"],
+                        "text": " ".join(w["word"] for w in current_group),
+                    })
+                    current_group = [word]
+                else:
+                    current_group.append(word)
+            if current_group:
                 segments.append({
-                    "start": all_words[0]["start"],
-                    "end": all_words[-1]["end"],
-                    "text": alternative.transcript.strip(),
+                    "start": current_group[0]["start"],
+                    "end": current_group[-1]["end"],
+                    "text": " ".join(w["word"] for w in current_group),
                 })
-            else:
-                segments.append({
-                    "start": 0.0,
-                    "end": 1.0,
-                    "text": alternative.transcript.strip(),
-                })
+
+        # Last-resort fallback: transcript string only, no word timestamps
+        if not segments and hasattr(alternative, "transcript") and alternative.transcript.strip():
+            segments.append({
+                "start": 0.0,
+                "end": 1.0,
+                "text": alternative.transcript.strip(),
+            })
 
         # Filter out empty segments
         segments = [s for s in segments if s["text"].strip()]

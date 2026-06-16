@@ -100,6 +100,8 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> dict[st
             "Fallback provider '%s' is the same as primary — skipping to avoid retry loop.",
             fallback,
         )
+        # ✅ FIX: Re-raise immediately so _transcribe_with_retry can handle retries
+        # Don't try alternative providers here — let the retry wrapper decide
         raise primary_error
 
     # --- Try fallback provider ---

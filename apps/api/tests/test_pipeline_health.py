@@ -15,7 +15,7 @@ from datetime import datetime
 pytest.importorskip("celery", reason="Celery not installed")
 
 from src.models.recording import Recording, RecordingStatus
-from src.workers.pipeline import STAGES, run_stage
+from src.workers.pipeline import STAGES, run_stage, get_active_stages
 from src.services.pipeline_progress import (
     update_pipeline_progress,
     log_stage_start,
@@ -27,9 +27,15 @@ from src.services.pipeline_progress import (
 class TestPipelineConfiguration:
     """Test pipeline stage configuration is correct."""
     
-    def test_pipeline_has_9_stages(self):
-        """Pipeline should have exactly 9 stages."""
-        assert len(STAGES) == 9, f"Expected 9 stages, got {len(STAGES)}"
+    def test_pipeline_has_9_stages_when_diarization_enabled(self):
+        """Pipeline should have 9 stages when diarization is enabled."""
+        from src.config import settings
+        if settings.enable_diarization:
+            assert len(STAGES) == 9, f"Expected 9 stages, got {len(STAGES)}"
+        else:
+            assert len(STAGES) == 9, "STAGES constant should always define 9 stages"
+            active = get_active_stages()
+            assert len(active) == 8, f"Expected 8 active stages when diarization disabled, got {len(active)}"
     
     def test_stage_names_are_valid(self):
         """All stage names should be non-empty strings."""
@@ -40,7 +46,9 @@ class TestPipelineConfiguration:
     
     def test_stage_order_is_correct(self):
         """Stages should be in correct execution order."""
-        expected_order = [
+        from src.config import settings
+        
+        expected_order_full = [
             "preprocess",
             "stt",
             "diarization",
@@ -52,8 +60,25 @@ class TestPipelineConfiguration:
             "scoring",
         ]
         
-        actual_order = [path.split("/")[-1] for path, _, _ in STAGES]
-        assert actual_order == expected_order, f"Stage order mismatch: {actual_order}"
+        expected_order_no_diar = [
+            "preprocess",
+            "stt",
+            # diarization skipped
+            "turns",
+            "roles",
+            "segmentation",
+            "extract-audio",
+            "analyze",
+            "scoring",
+        ]
+        
+        active_stages = get_active_stages()
+        actual_order = [path.split("/")[-1] for path, _, _ in active_stages]
+        
+        if settings.enable_diarization:
+            assert actual_order == expected_order_full, f"Stage order mismatch: {actual_order}"
+        else:
+            assert actual_order == expected_order_no_diar, f"Stage order mismatch: {actual_order}"
     
     def test_status_labels_match_enum(self):
         """All status labels should be valid RecordingStatus enum values."""

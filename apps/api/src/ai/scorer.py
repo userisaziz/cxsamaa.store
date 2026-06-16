@@ -140,7 +140,9 @@ def _parse_scores_response(response_text: str) -> dict[str, int | None] | None:
         except json.JSONDecodeError:
             pass
 
-    logger.error(f"Could not parse scores from response: {response_text[:200]}...")
+    # Log the actual response for debugging (truncate to 500 chars)
+    preview = repr(response_text[:500]) if response_text else "<empty response>"
+    logger.error(f"Could not parse scores from response: {preview}")
     return None
 
 

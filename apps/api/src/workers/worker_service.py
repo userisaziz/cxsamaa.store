@@ -6,7 +6,7 @@ import google.oauth2.id_token
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 
-from src.workers.pipeline import run_stage
+from src.workers.pipeline import run_stage, get_active_stages
 from src.workers.pipeline_control import PipelineHalted
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,8 @@ worker_app = FastAPI(title="CXSAMAA Pipeline Worker")
 CLOUD_TASKS_AUDIENCE = "https://your-worker-service-url.run.app"
 
 # Map URL paths to stage indices for cross-validation
+# NOTE: This map is static for route registration, but actual stage indices
+# are dynamically determined by get_active_stages() based on enable_diarization config
 STAGE_PATH_TO_INDEX: dict[str, int] = {
     "/stage/preprocess":   0,
     "/stage/stt":          1,
@@ -24,7 +26,7 @@ STAGE_PATH_TO_INDEX: dict[str, int] = {
     "/stage/turns":        3,
     "/stage/roles":        4,
     "/stage/segmentation": 5,
-    "/stage/stitch":       6,
+    "/stage/extract-audio": 6,
     "/stage/analyze":      7,
     "/stage/scoring":      8,
 }
@@ -87,6 +89,12 @@ def process_stage(task: PipelineTask, request: Request):
     expected_index = STAGE_PATH_TO_INDEX.get(actual_path)
     if expected_index is None:
         raise HTTPException(status_code=404, detail=f"Unknown stage path: {actual_path}")
+    
+    # When diarization is disabled, adjust expected indices for stages after diarization
+    from src.config import settings
+    if not settings.enable_diarization and expected_index > 2:
+        expected_index -= 1  # Shift indices down by 1
+    
     if task.stage_index != expected_index:
         logger.error(
             "Stage index mismatch: URL=%s expects index=%d, body has index=%d",

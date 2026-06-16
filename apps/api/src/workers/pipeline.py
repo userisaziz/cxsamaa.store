@@ -36,10 +36,11 @@ logger = logging.getLogger(__name__)
 
 # Ordered stage definitions: (endpoint_path, function, status_label)
 # Status labels must match RecordingStatus enum in src/models/recording.py
+# Note: Diarization stage is conditionally included based on settings.enable_diarization
 STAGES = [
     ("/stage/preprocess", preprocess_audio, "TRANSCRIBING"),
     ("/stage/stt", dispatch_transcription, "DIARIZING"),
-    ("/stage/diarization", dispatch_diarization, "RECONCILING"),
+    ("/stage/diarization", dispatch_diarization, "RECONCILING"),  # Optional: skipped if enable_diarization=False
     ("/stage/turns", build_conversation_turns, "RECONCILING"),  # Next status after turns
     ("/stage/roles", classify_speaker_roles, "SEGMENTING"),
     ("/stage/segmentation", segment_conversations, "SEGMENTING"),  # Stays SEGMENTING until extraction
@@ -47,6 +48,19 @@ STAGES = [
     ("/stage/analyze", analyze_conversations, "ANALYZING"),
     ("/stage/scoring", score_salesperson, "SCORING"),
 ]
+
+
+def get_active_stages() -> list[tuple]:
+    """Get pipeline stages, optionally excluding diarization.
+    
+    When enable_diarization=False, the diarization stage is removed from the pipeline.
+    This allows faster processing when speaker identification isn't needed.
+    """
+    if settings.enable_diarization:
+        return STAGES
+    
+    # Skip diarization stage (index 2)
+    return [stage for i, stage in enumerate(STAGES) if i != 2]
 
 
 def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_rerun: bool = False) -> None:
@@ -60,12 +74,14 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
     5. Enqueues the next stage via Cloud Tasks
     6. If last stage, marks recording COMPLETED
     """
-    if stage_index >= len(STAGES):
-        log_pipeline_complete(recording_id, len(STAGES))
+    active_stages = get_active_stages()
+    
+    if stage_index >= len(active_stages):
+        log_pipeline_complete(recording_id, len(active_stages))
         logger.info("[%s] Pipeline completed", recording_id)
         return
 
-    path, func, status_label = STAGES[stage_index]
+    path, func, status_label = active_stages[stage_index]
     stage_name = path.split("/")[-1]  # "preprocess", "stt", etc.
     
     # Idempotency check: skip if stage already completed (unless force_rerun)
@@ -74,12 +90,12 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
         if is_stage_completed_sync(recording_id, stage_name):
             logger.info(
                 "[%s] Skipping stage %d/%d: %s (already completed)",
-                recording_id, stage_index + 1, len(STAGES), stage_name,
+                recording_id, stage_index + 1, len(active_stages), stage_name,
             )
             # Still enqueue next stage
-            if stage_index + 1 < len(STAGES):
+            if stage_index + 1 < len(active_stages):
                 next_index = stage_index + 1
-                next_path = STAGES[next_index][0]
+                next_path = active_stages[next_index][0]
                 
                 if settings.app_env == "development":
                     from src.workers.pipeline_worker import enqueue_next_stage_celery
@@ -88,7 +104,7 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
                     enqueue_next_stage_cloud_tasks(recording_id, pipeline_version, next_path)
                     logger.info("[%s] Enqueued next stage (skipped): %s", recording_id, next_path)
             else:
-                log_pipeline_complete(recording_id, len(STAGES))
+                log_pipeline_complete(recording_id, len(active_stages))
                 logger.info("[%s] Pipeline completed", recording_id)
             return
     
@@ -109,7 +125,7 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
     
     logger.info(
         "[%s] Running stage %d/%d: %s",
-        recording_id, stage_index + 1, len(STAGES), path,
+        recording_id, stage_index + 1, len(active_stages), path,
     )
 
     try:
@@ -117,12 +133,12 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
         _update_status(recording_id, status_label)
         
         # Log stage completion
-        log_stage_complete(recording_id, stage_name, len(STAGES), stage_index)
+        log_stage_complete(recording_id, stage_name, len(active_stages), stage_index)
 
         # Enqueue next stage (dev: Celery, prod: Cloud Tasks)
-        if stage_index + 1 < len(STAGES):
+        if stage_index + 1 < len(active_stages):
             next_index = stage_index + 1
-            next_path = STAGES[next_index][0]
+            next_path = active_stages[next_index][0]
             
             if settings.app_env == "development":
                 # Development: enqueue via Celery for process isolation
@@ -133,7 +149,7 @@ def run_stage(recording_id: str, pipeline_version: str, stage_index: int, force_
                 enqueue_next_stage_cloud_tasks(recording_id, pipeline_version, next_path)
                 logger.info("[%s] Enqueued next stage via Cloud Tasks: %s", recording_id, next_path)
         else:
-            log_pipeline_complete(recording_id, len(STAGES))
+            log_pipeline_complete(recording_id, len(active_stages))
             logger.info("[%s] Pipeline completed", recording_id)
 
     except PipelineHalted as e:
@@ -264,7 +280,8 @@ def enqueue_first_stage(recording_id: str, pipeline_version: str = "v1") -> None
 
 def enqueue_next_stage_cloud_tasks(recording_id: str, pipeline_version: str, stage_path: str) -> None:
     """Called at the end of each stage to trigger the next one via Cloud Tasks."""
-    for index, (path, _, _) in enumerate(STAGES):
+    active_stages = get_active_stages()
+    for index, (path, _, _) in enumerate(active_stages):
         if path == stage_path:
             _enqueue_cloud_task(recording_id, pipeline_version, stage_path, index)
             return

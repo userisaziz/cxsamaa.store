@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     deepseek_timeout: int = 120
 
     # Pyannote.audio (Local Diarization)
+    enable_diarization: bool = True  # Enable speaker diarization (set False to skip diarization stage)
     diarization_use_pyannote: bool = True  # Enable pyannote as primary diarizer
     pyannote_hf_token: str = ""  # HuggingFace token for gated pyannote models
     pyannote_model_name: str = "pyannote/speaker-diarization-3.1"
