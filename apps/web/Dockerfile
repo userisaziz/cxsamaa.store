@@ -24,6 +24,9 @@ ENV NODE_ENV=production
 
 COPY --from=deps /app/node_modules ./node_modules
 
+# Copy workspace node_modules to web app directory for Next.js to find dependencies
+COPY --from=deps /app/node_modules ./apps/web/node_modules
+
 # Copy shared package source (used as workspace dep)
 COPY packages/shared/ ./packages/shared/
 
