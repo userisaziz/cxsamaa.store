@@ -1,0 +1,21 @@
+# Default: reuse .gitignore
+#!include:.gitignore
+
+# Exclude heavy dirs not needed for build
+node_modules/
+.venv/
+.next/
+dist/
+htmlcov/
+.coverage
+.pytest_cache/
+uploads/
+screenshots/
+docs/
+plan/
+.qoder/
+.logs/
+.impeccable/
+.vercel-tmp/
+.git/
+.github/
