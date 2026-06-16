@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SAMAA Public Share Script
+# CXSAMAA Public Share Script
 # Builds frontend, starts all services, and launches ngrok tunnel
 
 set -e
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "╔══════════════════════════════════════╗"
-echo "║   SAMAA Public Share Setup           ║"
+echo "║   CXSAMAA Public Share Setup           ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
@@ -139,7 +139,7 @@ NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | python3 -c "import sys, 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║                                                      ║"
-echo -e "║  ${GREEN}✓ SAMAA is now publicly accessible!${NC}              ║"
+echo -e "║  ${GREEN}✓ CXSAMAA is now publicly accessible!${NC}              ║"
 echo "║                                                      ║"
 echo -e "║  ${YELLOW}Public URL:${NC}                                     ║"
 echo -e "║  ${GREEN}$NGROK_URL${NC}     ║"

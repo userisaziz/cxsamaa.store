@@ -30,9 +30,9 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-SAMAA is an enterprise AI platform that transforms unstructured sales call audio into structured, actionable insights for retail organizations. Its mission is to give retail leaders unprecedented visibility into real customer conversations, turning hours of raw audio into reliable intelligence that drives coaching, performance tracking, and data-driven decisions across brands, stores, and individual salespeople.
+CXSAMAA is an enterprise AI platform that transforms unstructured sales call audio into structured, actionable insights for retail organizations. Its mission is to give retail leaders unprecedented visibility into real customer conversations, turning hours of raw audio into reliable intelligence that drives coaching, performance tracking, and data-driven decisions across brands, stores, and individual salespeople.
 
-Traditional sales analytics often rely on manual sampling, surveys, or basic call monitoring that provides limited context. These approaches miss the richness of actual customer interactions and fail to scale across large retail networks. SAMAA’s unique approach combines multiple AI services into a seamless pipeline: automatic speech recognition (ASR), speaker diarization, conversation segmentation, AI-powered analysis, and performance scoring. This integrated workflow delivers consistent, high-quality insights at enterprise scale.
+Traditional sales analytics often rely on manual sampling, surveys, or basic call monitoring that provides limited context. These approaches miss the richness of actual customer interactions and fail to scale across large retail networks. CXSAMAA’s unique approach combines multiple AI services into a seamless pipeline: automatic speech recognition (ASR), speaker diarization, conversation segmentation, AI-powered analysis, and performance scoring. This integrated workflow delivers consistent, high-quality insights at enterprise scale.
 
 Target audience
 - Retail brand managers who need cross-store performance visibility and strategic insights
@@ -46,7 +46,7 @@ Business value
 - Data-driven decision making: Actionable intelligence on customer intents, objections, product interests, and outcomes supports smarter training, merchandising, and leadership decisions
 
 Unique approach
-SAMAA orchestrates a multi-stage AI pipeline that turns long-form retail audio into granular, timestamped transcripts, labeled speaker segments, discrete customer conversations, and rich behavioral insights. By combining NVIDIA NIM APIs for STT, diarization, and LLM analysis with robust backend orchestration and a modern frontend, SAMAA delivers a complete solution that scales from individual coaching sessions to enterprise-wide intelligence.
+CXSAMAA orchestrates a multi-stage AI pipeline that turns long-form retail audio into granular, timestamped transcripts, labeled speaker segments, discrete customer conversations, and rich behavioral insights. By combining NVIDIA NIM APIs for STT, diarization, and LLM analysis with robust backend orchestration and a modern frontend, CXSAMAA delivers a complete solution that scales from individual coaching sessions to enterprise-wide intelligence.
 
 Why traditional approaches fall short
 - Limited visibility: Managers lack visibility into what actually happens in customer conversations
@@ -54,10 +54,10 @@ Why traditional approaches fall short
 - Unstructured outputs: Insights are difficult to aggregate, compare, and act upon
 - Reactive coaching: Without data, coaching tends to be generic rather than specific to observed behaviors
 
-SAMAA addresses these limitations by automating the entire audio-to-insights pipeline, ensuring consistent quality, scalable processing, and intuitive dashboards for every stakeholder.
+CXSAMAA addresses these limitations by automating the entire audio-to-insights pipeline, ensuring consistent quality, scalable processing, and intuitive dashboards for every stakeholder.
 
 ## Project Structure
-SAMAA is organized as a full-stack, monorepo-style project with a FastAPI backend, a Next.js frontend, and shared TypeScript types. The backend exposes REST APIs, manages asynchronous processing via Celery, and integrates with NVIDIA NIM services. The frontend provides role-aware dashboards and interactive tools for exploring conversations, performance, and AI insights.
+CXSAMAA is organized as a full-stack, monorepo-style project with a FastAPI backend, a Next.js frontend, and shared TypeScript types. The backend exposes REST APIs, manages asynchronous processing via Celery, and integrates with NVIDIA NIM services. The frontend provides role-aware dashboards and interactive tools for exploring conversations, performance, and AI insights.
 
 ```mermaid
 graph TB
@@ -136,7 +136,7 @@ These components work together to convert raw audio into a unified dataset that 
 - [conversation-timeline.tsx:1-82](file://apps/web/src/components/features/conversation-timeline.tsx#L1-L82)
 
 ## Architecture Overview
-SAMAA’s architecture integrates a frontend dashboard with a backend API and a multi-stage AI processing pipeline. The frontend consumes REST endpoints to present dashboards, insights, and interactive tools. The backend coordinates asynchronous processing via Celery workers and orchestrates NVIDIA NIM services for audio processing and analysis.
+CXSAMAA’s architecture integrates a frontend dashboard with a backend API and a multi-stage AI processing pipeline. The frontend consumes REST endpoints to present dashboards, insights, and interactive tools. The backend coordinates asynchronous processing via Celery workers and orchestrates NVIDIA NIM services for audio processing and analysis.
 
 ```mermaid
 graph TB
@@ -165,7 +165,7 @@ CELERY --> DB
 ## Detailed Component Analysis
 
 ### AI Pipeline Workflow
-SAMAA’s AI pipeline transforms audio into structured insights through a series of stages. The process begins with ingestion and preprocessing, followed by STT, diarization, segmentation, analysis, and scoring. Confidence thresholds and fallback strategies ensure robust outputs even under challenging conditions.
+CXSAMAA’s AI pipeline transforms audio into structured insights through a series of stages. The process begins with ingestion and preprocessing, followed by STT, diarization, segmentation, analysis, and scoring. Confidence thresholds and fallback strategies ensure robust outputs even under challenging conditions.
 
 ```mermaid
 flowchart TD
@@ -267,7 +267,7 @@ APIServer --> Settings : "reads"
 - [config.py:1-52](file://apps/api/src/config.py#L1-L52)
 
 ## Dependency Analysis
-SAMAA’s dependencies span frontend, backend, and AI services. The frontend depends on the backend REST API and shared types. The backend depends on configuration, storage, Redis for queues, PostgreSQL for persistence, and NVIDIA NIM for AI processing. The AI modules depend on the NVIDIA client and enforce confidence thresholds and structured outputs.
+CXSAMAA’s dependencies span frontend, backend, and AI services. The frontend depends on the backend REST API and shared types. The backend depends on configuration, storage, Redis for queues, PostgreSQL for persistence, and NVIDIA NIM for AI processing. The AI modules depend on the NVIDIA client and enforce confidence thresholds and structured outputs.
 
 ```mermaid
 graph LR
@@ -311,4 +311,4 @@ Common operational checks and guidance:
 - [README.md:261-308](file://README.md#L261-L308)
 
 ## Conclusion
-SAMAA revolutionizes sales performance analysis by converting unstructured audio into structured, actionable insights at scale. Through a seamless AI pipeline and intuitive dashboards, it empowers brand managers, store supervisors, sales coaches, and individual salespeople to improve coaching effectiveness, track performance, and make data-driven decisions. By combining NVIDIA NIM services with robust backend orchestration and a modern frontend, SAMAA bridges the gap between raw audio and meaningful business intelligence.
+CXSAMAA revolutionizes sales performance analysis by converting unstructured audio into structured, actionable insights at scale. Through a seamless AI pipeline and intuitive dashboards, it empowers brand managers, store supervisors, sales coaches, and individual salespeople to improve coaching effectiveness, track performance, and make data-driven decisions. By combining NVIDIA NIM services with robust backend orchestration and a modern frontend, CXSAMAA bridges the gap between raw audio and meaningful business intelligence.

@@ -23,7 +23,7 @@ export const roles: RolePage[] = [
     role: 'Store Managers',
     tagline: 'Run better stores, every day.',
     overview:
-      'SAMAA helps store managers understand what\'s happening on the floor, identify coaching opportunities, and improve team performance through real customer interactions.',
+      'CXSAMAA helps store managers understand what\'s happening on the floor, identify coaching opportunities, and improve team performance through real customer interactions.',
     outcome: 'Better execution, stronger teams, higher conversions.',
     gains: [
       {
@@ -62,7 +62,7 @@ export const roles: RolePage[] = [
     role: 'Sales Leaders',
     tagline: 'Scale winning sales behaviors.',
     overview:
-      'SAMAA helps sales leaders understand why teams succeed, replicate winning behaviors, and improve performance across stores and regions.',
+      'CXSAMAA helps sales leaders understand why teams succeed, replicate winning behaviors, and improve performance across stores and regions.',
     outcome: 'Consistent sales growth across teams and locations.',
     gains: [
       {
@@ -101,7 +101,7 @@ export const roles: RolePage[] = [
     role: 'Brand Teams',
     tagline: 'Protect and strengthen brand experience.',
     overview:
-      'SAMAA helps brand teams understand how customers experience the brand in real interactions.',
+      'CXSAMAA helps brand teams understand how customers experience the brand in real interactions.',
     outcome: 'Stronger brand alignment across every store.',
     gains: [
       {
@@ -140,7 +140,7 @@ export const roles: RolePage[] = [
     role: 'Executive Leadership',
     tagline: 'Make decisions with confidence.',
     overview:
-      'SAMAA connects customer conversations to business performance, giving leaders a clearer view of what drives growth.',
+      'CXSAMAA connects customer conversations to business performance, giving leaders a clearer view of what drives growth.',
     outcome: 'Faster, smarter business decisions.',
     gains: [
       {

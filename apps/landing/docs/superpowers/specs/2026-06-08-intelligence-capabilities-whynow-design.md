@@ -10,7 +10,7 @@
 
 Two changes to the homepage pitch flow, positioned as the final 1-2-3 punch before the footer:
 
-1. **New section: Intelligence Capabilities** — a 4-stage analytics maturity staircase showing SAMAA's depth (Descriptive → Diagnostic → Predictive → Prescriptive)
+1. **New section: Intelligence Capabilities** — a 4-stage analytics maturity staircase showing CXSAMAA's depth (Descriptive → Diagnostic → Predictive → Prescriptive)
 2. **Redesigned: WhyNowSection** — reframed from "market size" to "technology convergence" (urgency + FOMO angle), with a 3-column convergence block as the centerpiece
 
 ### Position in Page Flow
@@ -93,7 +93,7 @@ A vertical line on the left side connecting all 4 stages:
 Create a "now-or-never" moment. The technology for in-store conversation intelligence just arrived — this section makes that irrefutable.
 
 ### Section Header (Updated)
-- **Badge:** "SAMAA"
+- **Badge:** "CXSAMAA"
 - **Heading:** "Why Now"
 - **Description:** "Everything in retail is measured — except the conversations that actually drive sales. The technology to change that just arrived."
 

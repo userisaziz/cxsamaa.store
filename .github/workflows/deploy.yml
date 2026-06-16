@@ -237,7 +237,7 @@ jobs:
           # FastAPI — 256MB max
           sudo tee /etc/systemd/system/samaa-api.service > /dev/null << 'UNIT'
           [Unit]
-          Description=SAMAA FastAPI Backend
+          Description=CXSAMAA FastAPI Backend
           After=network.target
 
           [Service]
@@ -258,7 +258,7 @@ jobs:
           # Celery — 384MB max (solo pool, no torch loaded)
           sudo tee /etc/systemd/system/samaa-celery.service > /dev/null << 'UNIT'
           [Unit]
-          Description=SAMAA Celery Worker
+          Description=CXSAMAA Celery Worker
           After=network.target
 
           [Service]
@@ -280,7 +280,7 @@ jobs:
           # Next.js — 100MB max (standalone)
           sudo tee /etc/systemd/system/samaa-web.service > /dev/null << 'UNIT'
           [Unit]
-          Description=SAMAA Next.js Frontend (Standalone)
+          Description=CXSAMAA Next.js Frontend (Standalone)
           After=network.target
 
           [Service]

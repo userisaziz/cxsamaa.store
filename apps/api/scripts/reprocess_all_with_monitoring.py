@@ -224,7 +224,7 @@ def monitor_recording(token, recording_id, timeout=None):
     return "TIMEOUT", None
 
 def main():
-    print("🚀 SAMAA Pipeline Reprocessing & Monitoring")
+    print("🚀 CXSAMAA Pipeline Reprocessing & Monitoring")
     print(f"{'='*80}\n")
     print(f"🌐 API: {API_URL}")
     print(f"👤 Admin: {ADMIN_EMAIL}")

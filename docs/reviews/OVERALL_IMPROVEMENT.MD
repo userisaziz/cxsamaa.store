@@ -1,6 +1,6 @@
-# SAMAA Platform: Comprehensive Architectural Review & Strategic Roadmap
+# CXSAMAA Platform: Comprehensive Architectural Review & Strategic Roadmap
 
-This document serves as a formal architectural review of the SAMAA platform, synthesizing the UI/Dashboard, RAG/Search, Analytics API, and the Core AI Pipeline documentation you provided. 
+This document serves as a formal architectural review of the CXSAMAA platform, synthesizing the UI/Dashboard, RAG/Search, Analytics API, and the Core AI Pipeline documentation you provided. 
 
 It is divided into two parts: **Part 1** is a critical review of your architecture (what you nailed, and where the critical flaws lie). **Part 2** is a phased, actionable roadmap to take the platform from its current state to a highly scalable, production-ready system.
 

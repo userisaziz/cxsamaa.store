@@ -27,7 +27,7 @@ const PrivacyPolicy: React.FC = () => {
               <section>
                 <h3 className="text-heading-4 text-ink mb-3">1. Introduction</h3>
                 <p>
-                  SAMAA ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our platform and services.
+                  CXSAMAA ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our platform and services.
                 </p>
               </section>
 

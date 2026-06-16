@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# SAMAA - Complete Oracle Cloud Setup Script
+# CXSAMAA - Complete Oracle Cloud Setup Script
 # ============================================
 # Just run: bash setup-oracle.sh
 # ============================================
@@ -13,7 +13,7 @@ ORACLE_USER="ubuntu"
 REPO_URL="https://github.com/userisaziz/samaa-ai.git"
 
 echo "════════════════════════════════════════"
-echo "  🚀 SAMAA Oracle Cloud Setup"
+echo "  🚀 CXSAMAA Oracle Cloud Setup"
 echo "════════════════════════════════════════"
 echo ""
 
@@ -192,7 +192,7 @@ set -e
 # FastAPI service
 sudo tee /etc/systemd/system/samaa-api.service > /dev/null << 'EOF'
 [Unit]
-Description=SAMAA FastAPI Backend
+Description=CXSAMAA FastAPI Backend
 After=network.target
 
 [Service]
@@ -212,7 +212,7 @@ EOF
 # Celery service
 sudo tee /etc/systemd/system/samaa-celery.service > /dev/null << 'EOF'
 [Unit]
-Description=SAMAA Celery Worker
+Description=CXSAMAA Celery Worker
 After=network.target
 
 [Service]
@@ -233,7 +233,7 @@ EOF
 # Next.js service
 sudo tee /etc/systemd/system/samaa-web.service > /dev/null << 'EOF'
 [Unit]
-Description=SAMAA Next.js Frontend
+Description=CXSAMAA Next.js Frontend
 After=network.target
 
 [Service]

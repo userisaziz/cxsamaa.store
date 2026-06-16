@@ -31,7 +31,7 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-SAMAA is a full-stack platform designed to transform retail store audio into actionable business intelligence. It enables organizations to upload sales call recordings, automatically transcribe them, identify speakers, segment conversations, analyze outcomes, and compute performance scores powered by NVIDIA NIM APIs. The system provides role-based dashboards for Brand Admins, Store Managers, Sales Managers, and Salespeople, surfacing insights instantly to support coaching, performance monitoring, and operational decisions.
+CXSAMAA is a full-stack platform designed to transform retail store audio into actionable business intelligence. It enables organizations to upload sales call recordings, automatically transcribe them, identify speakers, segment conversations, analyze outcomes, and compute performance scores powered by NVIDIA NIM APIs. The system provides role-based dashboards for Brand Admins, Store Managers, Sales Managers, and Salespeople, surfacing insights instantly to support coaching, performance monitoring, and operational decisions.
 
 ## Project Structure
 The repository follows a monorepo layout with a backend API built on FastAPI, asynchronous workers using Celery, a Next.js frontend, and shared TypeScript types. Supporting infrastructure includes PostgreSQL with pgvector and Redis for caching and job queues.
@@ -101,7 +101,7 @@ WEB --> INSIGHTS
 - [apps/web/src/app/layout.tsx:1-35](file://apps/web/src/app/layout.tsx#L1-L35)
 
 ## Architecture Overview
-SAMAA’s architecture integrates a frontend dashboard with a backend API and asynchronous processing pipeline. Audio uploads trigger a Celery chain that normalizes audio, transcribes speech, identifies speakers, segments conversations, analyzes outcomes, and computes performance scores. Results are persisted in PostgreSQL and surfaced through the Next.js UI.
+CXSAMAA’s architecture integrates a frontend dashboard with a backend API and asynchronous processing pipeline. Audio uploads trigger a Celery chain that normalizes audio, transcribes speech, identifies speakers, segments conversations, analyzes outcomes, and computes performance scores. Results are persisted in PostgreSQL and surfaced through the Next.js UI.
 
 ```mermaid
 sequenceDiagram
@@ -335,4 +335,4 @@ INFRA --> REDIS
 - [apps/api/src/ai/analyzer.py:107-114](file://apps/api/src/ai/analyzer.py#L107-L114)
 
 ## Conclusion
-SAMAA provides a complete solution for retail audio intelligence, combining robust AI-powered analysis with a purpose-built, data-dense interface. Its modular architecture supports scalable ingestion, processing, and visualization tailored to the needs of retail stakeholders, enabling rapid insights and targeted coaching across organizational levels.
+CXSAMAA provides a complete solution for retail audio intelligence, combining robust AI-powered analysis with a purpose-built, data-dense interface. Its modular architecture supports scalable ingestion, processing, and visualization tailored to the needs of retail stakeholders, enabling rapid insights and targeted coaching across organizational levels.

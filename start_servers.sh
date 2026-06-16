@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================
-# SAMAA — Start all development services
+# CXSAMAA — Start all development services
 # ============================================
 # Usage:
 #   chmod +x start_servers.sh
@@ -53,7 +53,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo -e "${BLUE}╔══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   SAMAA Development Server Launcher  ║${NC}"
+echo -e "${BLUE}║   CXSAMAA Development Server Launcher  ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════╝${NC}"
 echo ""
 

@@ -28,7 +28,7 @@
 **Changes Made**
 - Enhanced design system specification with comprehensive color palette, typography scale, and component specifications
 - Added detailed accessibility guidelines and design principles
-- Updated component documentation to reflect the new SAMAA design system standards
+- Updated component documentation to reflect the new CXSAMAA design system standards
 - Integrated oklch color space implementation and semantic color tokens
 - Expanded component variants and styling guidelines based on the new design specification
 
@@ -50,13 +50,13 @@
 15. [Appendices](#appendices)
 
 ## Introduction
-This document describes the comprehensive UI component library built with shadcn/ui primitives and Tailwind CSS, governed by the SAMAA design system specification. The library implements a sophisticated analytical workspace design with carefully curated color palettes, geometric typography, and semantic component specifications. The design system emphasizes mint-green brand accents, neutral grays for information density, and restrained elegance suitable for retail audio intelligence applications.
+This document describes the comprehensive UI component library built with shadcn/ui primitives and Tailwind CSS, governed by the CXSAMAA design system specification. The library implements a sophisticated analytical workspace design with carefully curated color palettes, geometric typography, and semantic component specifications. The design system emphasizes mint-green brand accents, neutral grays for information density, and restrained elegance suitable for retail audio intelligence applications.
 
 **Updated** Enhanced with comprehensive design system specification defining color spaces, typography scales, and component specifications that guide all UI implementations.
 
 ## Design System Foundation
 
-The SAMAA design system establishes a refined analytical workspace philosophy centered around precision, clarity, and professional warmth. The system rejects generic enterprise aesthetics in favor of purpose-built solutions for audio intelligence analysis.
+The CXSAMAA design system establishes a refined analytical workspace philosophy centered around precision, clarity, and professional warmth. The system rejects generic enterprise aesthetics in favor of purpose-built solutions for audio intelligence analysis.
 
 ### Key Design Principles
 
@@ -79,7 +79,7 @@ The SAMAA design system establishes a refined analytical workspace philosophy ce
 
 ## Color Palette & Semantic Tokens
 
-The SAMAA color system implements oklch color space for perceptually uniform color reproduction and semantic meaning encoding.
+The CXSAMAA color system implements oklch color space for perceptually uniform color reproduction and semantic meaning encoding.
 
 ### Primary Color System
 
@@ -130,7 +130,7 @@ Every color-coded status pairs with text labels for accessibility. Color-blind u
 
 ## Typography Scale & Type System
 
-SAMAA implements a sophisticated two-face typography system that distinguishes between human language and machine-generated data through font selection and treatment.
+CXSAMAA implements a sophisticated two-face typography system that distinguishes between human language and machine-generated data through font selection and treatment.
 
 ### Font Family Hierarchy
 
@@ -168,7 +168,7 @@ Uppercase limited to 11px labels with wide tracking. No all-caps body copy, ensu
 ### Elevation & Shadow Vocabulary
 
 **Layering Strategy**
-SAMAA uses soft, diffused shadows creating gentle separation between content workspace and containers. Shadows serve as "whispers, not statements."
+CXSAMAA uses soft, diffused shadows creating gentle separation between content workspace and containers. Shadows serve as "whispers, not statements."
 
 **Shadow Specifications**
 - **Card Rest**: `0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)` - subtle card lift
@@ -870,7 +870,7 @@ class Tooltip {
 ## Accessibility Guidelines
 
 ### WCAG Compliance Standards
-The SAMAA design system maintains WCAG AAA compliance across all components with specific focus on text contrast ratios and interactive element accessibility.
+The CXSAMAA design system maintains WCAG AAA compliance across all components with specific focus on text contrast ratios and interactive element accessibility.
 
 **Text Contrast Requirements**
 - **Body Text**: Minimum 7:1 contrast ratio on all backgrounds
@@ -902,7 +902,7 @@ Uppercase limited to 11px labels with wide tracking. No all-caps body copy, ensu
 - [DESIGN.md:223-242](file://DESIGN.md#L223-L242)
 
 ## Dependency Analysis
-The UI components depend on the comprehensive SAMAA design system specification, with enhanced color token integration and semantic variant systems.
+The UI components depend on the comprehensive CXSAMAA design system specification, with enhanced color token integration and semantic variant systems.
 
 ```mermaid
 graph LR
@@ -1015,9 +1015,9 @@ UTILS --> AVATAR
 - [dropdown-menu.tsx:1-269](file://apps/web/src/components/ui/dropdown-menu.tsx#L1-L269)
 
 ## Conclusion
-The SAMAA UI component library represents a comprehensive design system implementation that balances analytical precision with professional warmth. Through careful color palette curation, geometric typography, and semantic component specifications, the system creates a cohesive interface suitable for retail audio intelligence analysis. The integration of oklch color space ensures perceptual uniformity, while strict accessibility guidelines guarantee inclusive user experiences.
+The CXSAMAA UI component library represents a comprehensive design system implementation that balances analytical precision with professional warmth. Through careful color palette curation, geometric typography, and semantic component specifications, the system creates a cohesive interface suitable for retail audio intelligence analysis. The integration of oklch color space ensures perceptual uniformity, while strict accessibility guidelines guarantee inclusive user experiences.
 
-The design system's emphasis on restraint—particularly the mint-green accent rule—creates visual hierarchy without overwhelming users. The two-face typography system clearly distinguishes between human language and machine-generated data, supporting the analytical workflow. Together, these design decisions establish SAMAA as a purpose-built interface for audio intelligence analysis rather than a generic enterprise solution.
+The design system's emphasis on restraint—particularly the mint-green accent rule—creates visual hierarchy without overwhelming users. The two-face typography system clearly distinguishes between human language and machine-generated data, supporting the analytical workflow. Together, these design decisions establish CXSAMAA as a purpose-built interface for audio intelligence analysis rather than a generic enterprise solution.
 
 ## Appendices
 

@@ -1,7 +1,7 @@
 [project]
 name = "samaa-api"
 version = "0.1.0"
-description = "SAMAA - Sales Audio Management & AI Analysis API"
+description = "CXSAMAA - Sales Audio Management & AI Analysis API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

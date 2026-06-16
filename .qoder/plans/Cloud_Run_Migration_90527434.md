@@ -171,7 +171,7 @@ from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 import logging
 
-worker_app = FastAPI(title="SAMAA Pipeline Worker")
+worker_app = FastAPI(title="CXSAMAA Pipeline Worker")
 logger = logging.getLogger(__name__)
 
 class PipelineTask(BaseModel):

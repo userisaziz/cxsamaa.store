@@ -286,7 +286,7 @@ const WhyNowSection: React.FC = () => {
     <section className="bg-canvas section-padding">
       <div className="container-main">
         <SectionHeader
-          badge="SAMAA"
+          badge="CXSAMAA"
           heading="Why Now"
           description="Everything in retail is measured — except the conversations that actually drive sales. The technology to change that just arrived."
         />
@@ -322,7 +322,7 @@ const WhyNowSection: React.FC = () => {
               CONVERSATIONS — The Missing Layer
             </span>
             <span className="ml-auto inline-block px-3 py-1.5 bg-ink text-brand-green text-micro-uppercase rounded-full tracking-wider whitespace-nowrap">
-              UNLOCKED BY SAMAA
+              UNLOCKED BY CXSAMAA
             </span>
           </div>
         </div>

@@ -97,7 +97,7 @@ const HeroSection: React.FC = () => {
         </h1>
 
         <p className="hero-subtitle text-subtitle text-charcoal max-w-2xl mx-auto mb-8 opacity-0">
-          SAMAA captures in-store customer conversations, processes them through
+          CXSAMAA captures in-store customer conversations, processes them through
           proprietary AI, and delivers actionable insights that improve store
           performance, employee coaching, and business outcomes.
         </p>

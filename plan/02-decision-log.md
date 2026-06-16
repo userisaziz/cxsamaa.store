@@ -1,4 +1,4 @@
-# SAMAA — Decision Log
+# CXSAMAA — Decision Log
 
 **Purpose:** Quick reference for all architectural and technical decisions made during planning.  
 **Last Updated:** 2026-06-09  
@@ -31,22 +31,22 @@
 
 ## NVIDIA NeMo Ecosystem Reference
 
-Researched 2026-06-09. Key findings for SAMAA:
+Researched 2026-06-09. Key findings for CXSAMAA:
 
 ### The 4-Layer Stack
 ```
 Layer 4: RIVA — Self-hosted GPU inference server (deploy custom models)
-Layer 3: NIM — Hosted API endpoints (what SAMAA uses NOW)
+Layer 3: NIM — Hosted API endpoints (what CXSAMAA uses NOW)
 Layer 2: NeMo Framework — Python library to train/fine-tune models (Sprint 7)
 Layer 1: PyTorch + CUDA + GPU hardware
 ```
 
-### What SAMAA Uses NOW (NIM APIs)
+### What CXSAMAA Uses NOW (NIM APIs)
 - **Parakeet CTC 1.1B** → STT (`nvidia_stt_model`)
 - **Streusand RNNT** → Speaker diarization (`nvidia_diarization_model`)
 - **Llama 3.3 70B** → Analysis + scoring (`nvidia_llm_model`)
 
-### What SAMAA Will Use LATER (Sprint 7)
+### What CXSAMAA Will Use LATER (Sprint 7)
 - **NeMo Framework** → Train custom ASR + diarization on retail audio
 - **Speech SSL** → Pre-train on unlabeled store audio
 - **Speech Data Processor** → Batch dataset preparation
@@ -54,7 +54,7 @@ Layer 1: PyTorch + CUDA + GPU hardware
 - **ASR Evaluator** → Benchmark custom vs. hosted models
 - **Riva** → Deploy custom models (self-hosted GPU inference)
 
-### Not Relevant to SAMAA
+### Not Relevant to CXSAMAA
 - LLM training (Megatron) — using Llama via API
 - Multimodal models — audio-only
 - TTS — don't generate speech

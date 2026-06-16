@@ -1,4 +1,4 @@
-# SAMAA — Implementation Plan
+# CXSAMAA — Implementation Plan
 
 **Based on:** [00-architecture-design.md](./00-architecture-design.md)  
 **Status:** Ready for Execution  

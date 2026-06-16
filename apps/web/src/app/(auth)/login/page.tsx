@@ -143,7 +143,7 @@ export default function LoginPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-green/15 border border-brand-green/20">
               <Headphones className="h-5 w-5 text-brand-green" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-on-dark">SAMAA</span>
+            <span className="text-lg font-semibold tracking-tight text-on-dark">CXSAMAA</span>
           </div>
 
           {/* Center content */}
@@ -178,7 +178,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <p className="text-[12px] text-on-dark-muted/50">
-            &copy; {new Date().getFullYear()} SAMAA. All rights reserved.
+            &copy; {new Date().getFullYear()} CXSAMAA. All rights reserved.
           </p>
         </div>
       </div>
@@ -192,7 +192,7 @@ export default function LoginPage() {
               <Headphones className="h-6 w-6 text-primary-foreground" />
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-semibold tracking-tight text-ink">SAMAA</h2>
+              <h2 className="text-xl font-semibold tracking-tight text-ink">CXSAMAA</h2>
               <p className="text-[13px] text-steel mt-0.5">Sales Audio Management &amp; AI Analysis</p>
             </div>
           </div>

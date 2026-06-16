@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign the "What SAMAA Solves" section into a single-column vertical stack of 4 wide horizontal cards with alternating 2-tone surface rhythm, oversized numbers, no highlight bullets.
+**Goal:** Redesign the "What CXSAMAA Solves" section into a single-column vertical stack of 4 wide horizontal cards with alternating 2-tone surface rhythm, oversized numbers, no highlight bullets.
 
 **Architecture:** Single file (`src/sections/WhatSamaaSolvesSection.tsx`). The data model drops `highlights`; the card component accepts a `tone` prop for alternating surface colors; the outer grid becomes `grid-cols-1` only. All other components (SectionHeader, useScrollReveal) are unchanged.
 
-**Tech Stack:** React, TypeScript, Tailwind CSS (custom SAMAA design tokens: `brand-green`, `surface-dark-card`, `hairline-dark`, `on-dark-muted`, etc.), GSAP (via useScrollReveal).
+**Tech Stack:** React, TypeScript, Tailwind CSS (custom CXSAMAA design tokens: `brand-green`, `surface-dark-card`, `hairline-dark`, `on-dark-muted`, etc.), GSAP (via useScrollReveal).
 
 **Spec:** `docs/superpowers/specs/2026-06-07-what-samaa-solves-section-design.md`
 

@@ -31,7 +31,7 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document describes the backend architecture of the FastAPI service powering the SAMAA platform. It covers application initialization, routing hierarchy, dependency injection patterns, middleware configuration, configuration management, database and ORM integration, modular routers under api/v1/, dependency helpers in deps.py, and health checks. It also outlines security considerations, error handling patterns, and performance optimization strategies, with architectural diagrams to illustrate component relationships and data flow.
+This document describes the backend architecture of the FastAPI service powering the CXSAMAA platform. It covers application initialization, routing hierarchy, dependency injection patterns, middleware configuration, configuration management, database and ORM integration, modular routers under api/v1/, dependency helpers in deps.py, and health checks. It also outlines security considerations, error handling patterns, and performance optimization strategies, with architectural diagrams to illustrate component relationships and data flow.
 
 ## Project Structure
 The backend is organized around a FastAPI application with a clear separation of concerns:

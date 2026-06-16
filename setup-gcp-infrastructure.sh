@@ -44,8 +44,8 @@ echo "✅ APIs enabled successfully"
 echo ""
 echo "🔐 Creating Worker Service Account..."
 gcloud iam service-accounts create samaa-worker-sa \
-  --display-name="SAMAA Worker Service Account" \
-  --description="Service account for SAMAA pipeline worker with Cloud Tasks access"
+  --display-name="CXSAMAA Worker Service Account" \
+  --description="Service account for CXSAMAA pipeline worker with Cloud Tasks access"
 
 # Grant required roles to the service account
 echo "🔑 Granting roles to service account..."
@@ -85,7 +85,7 @@ echo "🗂️ Creating Artifact Registry repository..."
 gcloud artifacts repositories create samaa-images \
   --repository-format=docker \
   --location="${REGION}" \
-  --description="SAMAA AI container images" \
+  --description="CXSAMAA AI container images" \
   || echo "Artifact repository already exists"
 
 echo "✅ Artifact Registry configured"

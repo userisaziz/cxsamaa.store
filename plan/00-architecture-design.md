@@ -1,4 +1,4 @@
-# SAMAA — Architecture & Design Document
+# CXSAMAA — Architecture & Design Document
 
 **Version:** 1.0  
 **Status:** Approved  
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-SAMAA (Sales Audio Management & AI Analysis) is an enterprise intelligence platform that transforms raw retail store audio recordings into structured business intelligence. This document defines the complete system architecture, technology choices, folder structure, database schema, API design, AI pipeline, and frontend design.
+CXSAMAA (Sales Audio Management & AI Analysis) is an enterprise intelligence platform that transforms raw retail store audio recordings into structured business intelligence. This document defines the complete system architecture, technology choices, folder structure, database schema, API design, AI pipeline, and frontend design.
 
 ### Key Design Decisions
 

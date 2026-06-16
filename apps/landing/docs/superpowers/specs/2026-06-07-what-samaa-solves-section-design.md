@@ -6,7 +6,7 @@
 
 ## Goal
 
-Redesign the "What SAMAA Solves" section to feel less dense and more meaningful. Reduce the visible information per card and let each problem breathe through a single-column stack of full-width horizontal cards with alternating surface tones.
+Redesign the "What CXSAMAA Solves" section to feel less dense and more meaningful. Reduce the visible information per card and let each problem breathe through a single-column stack of full-width horizontal cards with alternating surface tones.
 
 ## Problem With Current Design
 

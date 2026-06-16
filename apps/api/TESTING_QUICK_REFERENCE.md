@@ -1,4 +1,4 @@
-# SAMAA Testing Quick Reference
+# CXSAMAA Testing Quick Reference
 
 ## 🚀 Quick Commands
 

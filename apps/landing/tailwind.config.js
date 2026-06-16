@@ -42,7 +42,7 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // SAMAA Design Tokens
+        // CXSAMAA Design Tokens
         brand: {
           green: '#00d4a4',
           'green-deep': '#00b88e',

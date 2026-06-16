@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================
-# SAMAA — Seed the database with test data
+# CXSAMAA — Seed the database with test data
 # ============================================
 # Usage:
 #   chmod +x seed.sh
@@ -22,7 +22,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 API_DIR="$ROOT_DIR/apps/api"
 
 echo -e "${BLUE}╔══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║      SAMAA Database Seeder           ║${NC}"
+echo -e "${BLUE}║      CXSAMAA Database Seeder           ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════╝${NC}"
 echo ""
 

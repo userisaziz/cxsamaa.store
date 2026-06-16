@@ -1,4 +1,4 @@
-// Shared constants for SAMAA platform
+// Shared constants for CXSAMAA platform
 
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",

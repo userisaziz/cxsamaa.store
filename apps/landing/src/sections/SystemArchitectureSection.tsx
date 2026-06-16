@@ -90,7 +90,7 @@ const SystemArchitectureSection: React.FC = () => {
           ))}
         </div>
 
-        {/* What SAMAA Makes Visible */}
+        {/* What CXSAMAA Makes Visible */}
         <div ref={visibilityRef} className="mb-16 md:mb-20">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Text */}
@@ -128,14 +128,14 @@ const SystemArchitectureSection: React.FC = () => {
           </div>
         </div>
 
-        {/* Why Sales Leadership Choose SAMAA */}
+        {/* Why Sales Leadership Choose CXSAMAA */}
         <div ref={choiceRef} className="mb-16 md:mb-20">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Image */}
             <div className="order-last lg:order-first">
               <img
                 src={communicationImg}
-                alt="Sales leader viewing SAMAA AI Dashboard"
+                alt="Sales leader viewing CXSAMAA AI Dashboard"
                  className="w-full rounded-lg"
                 // className="w-full rounded-lg border border-hairline-dark shadow-mockup"
               />
