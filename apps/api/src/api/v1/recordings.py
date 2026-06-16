@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import FileResponse
 
-from src.api.deps import require_brand_admin_up, require_operator_up, require_salesperson_up
+from src.api.deps import require_authenticated, require_brand_admin_up, require_operator_up, require_salesperson_up
 from src.database import get_db
 from src.models.user import User
 from src.schemas.recording import (
@@ -53,7 +53,7 @@ async def list_recordings_endpoint(
     date_from: str | None = None,
     date_to: str | None = None,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(require_salesperson_up),
+    _user: User = Depends(require_authenticated),
 ):
     date_from_dt = None
     date_to_dt = None

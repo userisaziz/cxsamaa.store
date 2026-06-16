@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Mic, ChevronLeft, ChevronRight, RefreshCw, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PipelineActionButtons } from "@/components/pipeline-action-buttons";
+import { useQueryClient } from "@tanstack/react-query";
 
 const STATUSES = [
   { value: "ALL", label: "All Statuses" },
@@ -48,13 +50,10 @@ function formatDate(dateStr: string): string {
 }
 
 export default function OperationsHistoryPage() {
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [dateFrom, setDateFrom] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [dateTo, setDateTo] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -200,6 +199,7 @@ export default function OperationsHistoryPage() {
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Format</TableHead>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Size</TableHead>
                     <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel">Status</TableHead>
+                    <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-steel text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -223,11 +223,19 @@ export default function OperationsHistoryPage() {
                       <TableCell>
                         <StatusBadge status={rec.status} />
                       </TableCell>
+                      <TableCell className="text-right">
+                        <PipelineActionButtons
+                          recordingId={rec.id}
+                          status={rec.status}
+                          pipelineState={rec.pipeline_state ?? undefined}
+                          onAction={() => queryClient.invalidateQueries({ queryKey: ["operations-recordings"] })}
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                   {recordings.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-12">
+                      <TableCell colSpan={7} className="py-12">
                         <div className="flex flex-col items-center justify-center text-center">
                           <Inbox className="h-10 w-10 text-stone/40 mb-3" />
                           <p className="text-sm font-medium text-steel">No recordings found</p>

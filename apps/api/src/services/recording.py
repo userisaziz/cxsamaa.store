@@ -110,6 +110,9 @@ async def upload_recording(
 ) -> Recording:
     """Upload a new recording file and start processing pipeline."""
     from pathlib import Path
+    from sqlalchemy import select
+    from src.models.salesperson import Salesperson
+    from src.models.store import Store
     
     # Validate file
     if not file.filename or not file.content_type:
@@ -119,9 +122,29 @@ async def upload_recording(
     file_content = await file.read()
     file_size = len(file_content)
     
-    # Generate unique filename
+    # Generate unique filename with brand-store-salesperson hierarchy
     file_ext = Path(file.filename).suffix
-    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    sp_uuid = uuid.UUID(salesperson_id)
+    sp_short = str(sp_uuid)[:8]
+    today = datetime.now().strftime("%Y%m%d")
+    
+    brand_short = "unknown"
+    store_short = "unknown"
+    
+    sp_stmt = select(Salesperson).where(Salesperson.id == sp_uuid)
+    sp_result = await db.execute(sp_stmt)
+    salesperson = sp_result.scalar_one_or_none()
+    if salesperson:
+        store_short = str(salesperson.store_id)[:8]
+        store_stmt = select(Store).where(Store.id == salesperson.store_id)
+        store_result = await db.execute(store_stmt)
+        store = store_result.scalar_one_or_none()
+        if store:
+            brand_short = str(store.brand_id)[:8]
+    
+    recording_id = uuid.uuid4()
+    short_id = str(recording_id)[:8]
+    unique_filename = f"recordings/{brand_short}-{store_short}-{sp_short}/{today}-{short_id}{file_ext}"
     
     # Upload to storage
     storage = get_storage()
@@ -129,10 +152,11 @@ async def upload_recording(
     
     # Create recording record
     recording = Recording(
-        salesperson_id=uuid.UUID(salesperson_id),
+        id=recording_id,
+        salesperson_id=sp_uuid,
         file_url=file_url,
         file_size=file_size,
-        duration_seconds=None,  # Will be updated after preprocessing
+        duration_seconds=None,
         format=file.content_type,
         status=RecordingStatus.UPLOADED,
         recorded_at=recorded_at,

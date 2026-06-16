@@ -9,6 +9,7 @@ from src.models.conversation import Conversation, ConversationAnalysis
 from src.models.metrics import DailyMetrics
 from src.models.recording import Recording, RecordingStatus
 from src.models.transcript import TranscriptSegment
+from src.workers.pipeline_control import PipelineHalted
 from src.workers.preprocessing import (
     _get_recording_sync,
     _update_recording_status_sync,
@@ -238,9 +239,24 @@ def score_salesperson(recording_id: str) -> str:
         # Load conversations with segments
         conversations = _get_conversations_with_segments_sync(recording_id)
         if not conversations:
-            logger.warning("[%s] No conversations to score", recording_id)
-            _complete_recording_sync(recording_id)
-            return recording_id
+            logger.warning("[%s] No conversations to score — pipeline may have skipped segmentation", recording_id)
+            # Halt pipeline — scoring without conversations is meaningless.
+            # This is a safety net: segmentation should have halted already.
+            _update_recording_status_sync(
+                recording_id,
+                RecordingStatus.FAILED,
+                "No conversations found for scoring. Segmentation may have produced 0 conversations.",
+            )
+            from src.services.pipeline_state import mark_stage_failed_sync
+            mark_stage_failed_sync(
+                recording_id,
+                "scoring",
+                "No conversations found for scoring. Retry from segmentation stage.",
+            )
+            raise PipelineHalted(
+                f"No conversations to score for recording {recording_id}. "
+                "Retry from segmentation stage."
+            )
 
         logger.info("[%s] Scoring %d conversations", recording_id, len(conversations))
 
@@ -292,6 +308,11 @@ def score_salesperson(recording_id: str) -> str:
         mark_stage_complete_sync(recording_id, "scoring")
         
         return recording_id
+
+    except PipelineHalted:
+        # PipelineHalted already marked recording FAILED and stage failed.
+        # Re-raise so the pipeline orchestrator knows to stop.
+        raise
 
     except Exception as exc:
         logger.error("[%s] Scoring failed: %s", recording_id, exc, exc_info=True)

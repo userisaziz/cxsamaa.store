@@ -29,18 +29,44 @@ async def generate_presigned_upload_url(
         - file_url: URL/path for the uploaded file (returned after upload)
     """
     from datetime import datetime
+    from sqlalchemy import select
+    from src.models.salesperson import Salesperson
+    from src.models.store import Store
     
-    # Generate unique recording ID and storage key
+    # Generate unique recording ID
     recording_id = uuid.uuid4()
     file_ext = Path(filename).suffix
-    file_key = f"recordings/{recording_id}/{recording_id}{file_ext}"
+    
+    # Resolve brand/store hierarchy for a clear, scannable file path
+    today = datetime.now().strftime("%Y%m%d")
+    sp_uuid = uuid.UUID(salesperson_id)
+    sp_short = str(sp_uuid)[:8]
+    
+    brand_short = "unknown"
+    store_short = "unknown"
+    
+    sp_stmt = select(Salesperson).where(Salesperson.id == sp_uuid)
+    sp_result = await db.execute(sp_stmt)
+    salesperson = sp_result.scalar_one_or_none()
+    
+    if salesperson:
+        store_short = str(salesperson.store_id)[:8]
+        store_stmt = select(Store).where(Store.id == salesperson.store_id)
+        store_result = await db.execute(store_stmt)
+        store = store_result.scalar_one_or_none()
+        if store:
+            brand_short = str(store.brand_id)[:8]
+    
+    # Human-readable path: recordings/{brand_prefix}-{store_prefix}-{sp_prefix}/{date}-{short_id}.ext
+    short_id = str(recording_id)[:8]
+    file_key = f"recordings/{brand_short}-{store_short}-{sp_short}/{today}-{short_id}{file_ext}"
     
     # Create recording record in PENDING_UPLOAD state
     recording = Recording(
         id=recording_id,
-        salesperson_id=uuid.UUID(salesperson_id),
+        salesperson_id=sp_uuid,
         file_url=file_key,
-        file_size=None,  # Will be updated after upload confirmation
+        file_size=None,
         duration_seconds=None,
         format=content_type,
         status=RecordingStatus.PENDING_UPLOAD,
@@ -55,13 +81,14 @@ async def generate_presigned_upload_url(
     upload_url = await storage.generate_presigned_upload_url(
         key=file_key,
         content_type=content_type,
-        expires_in=3600,  # 1 hour
+        expires_in=3600,
     )
     
     logger.info(
-        "Generated presigned upload URL for recording %s (salesperson: %s)",
+        "Generated presigned upload URL for recording %s (salesperson: %s) key=%s",
         recording_id,
         salesperson_id,
+        file_key,
     )
     
     return {

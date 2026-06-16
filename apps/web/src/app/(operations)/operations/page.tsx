@@ -722,7 +722,15 @@ export default function OperationsPage() {
                           </div>
                         </div>
                       </div>
-                      <StatusBadge status={r.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={r.status} />
+                        <PipelineActionButtons
+                          recordingId={r.id}
+                          status={r.status}
+                          pipelineState={r.pipeline_state ?? undefined}
+                          onAction={handlePipelineAction}
+                        />
+                      </div>
                     </div>
                   );
                 })}

@@ -16,6 +16,7 @@ class RecordingResponse(BaseModel):
     uploaded_at: datetime
     recorded_at: datetime | None = None
     processed_at: datetime | None = None
+    pipeline_state: dict | None = None
 
     model_config = {"from_attributes": True}
 

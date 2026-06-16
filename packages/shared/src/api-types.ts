@@ -112,6 +112,14 @@ export interface Recording {
   uploaded_at: string;
   recorded_at: string | null;
   processed_at: string | null;
+  pipeline_state?: {
+    current_stage?: string;
+    completed_stages?: string[];
+    failed_stage?: string | null;
+    error_message?: string | null;
+    stage_timestamps?: Record<string, string>;
+    retry_count?: Record<string, number>;
+  } | null;
 }
 
 export interface RecordingStatusResponse {

@@ -36,9 +36,9 @@ class R2Storage(StorageBackend):
             region_name="auto",  # R2 uses "auto" as region
             config=BotoConfig(
                 signature_version="s3v4",
-                retries={"max_attempts": 3, "mode": "standard"},
-                connect_timeout=10,
-                read_timeout=60,
+                retries={"max_attempts": 5, "mode": "adaptive"},
+                connect_timeout=60,       # 60s connection timeout
+                read_timeout=600,         # 10 minutes for large file uploads
             ),
         )
 

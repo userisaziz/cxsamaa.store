@@ -120,19 +120,22 @@ export function PipelineActionButtons({
     // Uploading stage: Start processing
     if (isUploaded) {
       return (
-        <Button
-          size="sm"
-          onClick={() => handleStartPipeline(false)}
-          disabled={isLoading}
-          className="gap-1.5"
-        >
-          {isLoading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
-          Start Processing
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => handleStartPipeline(false)}
+            disabled={isLoading}
+            className="gap-1.5"
+          >
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+            Start Processing
+          </Button>
+          <StageSelector />
+        </div>
       );
     }
 
@@ -161,7 +164,7 @@ export function PipelineActionButtons({
       );
     }
 
-    // Completed: Show force rerun
+    // Completed: Show force rerun + stage selector
     if (isCompleted) {
       return (
         <div className="flex items-center gap-2">
@@ -184,7 +187,7 @@ export function PipelineActionButtons({
       );
     }
 
-    // Processing: Show skip to next stage option
+    // Processing: Show skip to next stage option + stage selector
     if (isProcessing && currentStage && nextStage) {
       return (
         <div className="flex items-center gap-2">
@@ -207,12 +210,8 @@ export function PipelineActionButtons({
       );
     }
 
-    // Processing without next stage: Only show stage selector
-    if (isProcessing && currentStage) {
-      return <StageSelector />;
-    }
-
-    return null;
+    // Processing without next stage or no pipeline_state: Always show stage selector
+    return <StageSelector />;
   };
 
   // Reusable stage selector dropdown
@@ -230,7 +229,7 @@ export function PipelineActionButtons({
           ) : (
             <ChevronRight className="h-3.5 w-3.5" />
           )}
-          Resume from...
+          Reprocess from...
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
@@ -273,8 +272,8 @@ export function PipelineActionButtons({
     </DropdownMenu>
   );
 
-  // Don't show buttons for unknown states
-  if (!isUploaded && !isFailed && !isCompleted && !currentStage) {
+  // Always show stage selector for any recording with a recognized status
+  if (!isUploaded && !isFailed && !isCompleted && !currentStage && !status) {
     return null;
   }
 

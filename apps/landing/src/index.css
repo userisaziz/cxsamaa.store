@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.625rem;
+
+    /* SAMAA Design Tokens */
+    --brand-green: #00d4a4;
+    --brand-green-deep: #00b88e;
+    --brand-green-soft: rgba(0, 212, 164, 0.12);
+    --brand-green-glow: rgba(0, 212, 164, 0.25);
+    --brand-blue: #3772cf;
+    --canvas: #fafbfc;
+    --canvas-dark: #0a0a0a;
+    --canvas-pure: #ffffff;
+    --surface: #f3f4f6;
+    --surface-soft: #f9fafb;
+    --surface-code: #1e1e1e;
+    --surface-dark-card: #141414;
+    --hairline: #e5e7eb;
+    --hairline-soft: #f0f0f0;
+    --hairline-dark: #2a2a2a;
+    --ink: #111827;
+    --charcoal: #374151;
+    --slate: #6b7280;
+    --steel: #9ca3af;
+    --stone: #d1d5db;
+    --on-dark: #ffffff;
+    --on-dark-muted: rgba(255, 255, 255, 0.6);
+    --on-dark-subtle: rgba(255, 255, 255, 0.35);
+  }
+
+  * {
+    @apply border-hairline;
+  }
+
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: auto;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    overflow-x: hidden;
+  }
+
+  code, .font-mono {
+    font-family: 'Geist Mono', 'SF Mono', Menlo, Consolas, monospace;
+  }
+}
+
+@layer components {
+  .container-main {
+    @apply max-w-container mx-auto px-4 md:px-8;
+  }
+
+  .section-padding {
+    @apply py-12 md:py-16 lg:py-section-lg;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-5 py-2.5 bg-ink text-white rounded-full text-button-md font-medium transition-all duration-150;
+  }
+  .btn-primary:hover {
+    @apply bg-charcoal scale-[1.02];
+  }
+  .btn-primary:active {
+    @apply scale-[0.98];
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center px-5 py-2.5 bg-brand-green text-ink rounded-full text-button-md font-medium transition-all duration-150;
+  }
+  .btn-accent:hover {
+    @apply bg-brand-green-deep scale-[1.02];
+  }
+  .btn-accent:active {
+    @apply scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-5 py-2.5 bg-transparent text-ink border border-hairline rounded-full text-button-md font-medium transition-all duration-150;
+  }
+  .btn-secondary:hover {
+    @apply border-slate bg-surface-soft;
+  }
+  .btn-secondary:active {
+    @apply scale-[0.98];
+  }
+
+  .btn-on-dark {
+    @apply inline-flex items-center justify-center px-5 py-2.5 bg-white text-ink rounded-full text-button-md font-medium transition-all duration-150;
+  }
+  .btn-on-dark:hover {
+    @apply bg-white/90 scale-[1.02];
+  }
+  .btn-on-dark:active {
+    @apply scale-[0.98];
+  }
+
+  .card-base {
+    @apply bg-canvas-pure rounded-lg p-6 border border-hairline;
+  }
+
+  .card-dark {
+    @apply bg-surface-dark-card rounded-lg p-6 border border-hairline-dark;
+  }
+
+  .card-feature {
+    @apply bg-canvas-pure rounded-lg p-8 border border-hairline transition-all duration-200;
+  }
+  .card-feature:hover {
+    @apply border-brand-green/30 shadow-brand-glow;
+  }
+
+  .card-code {
+    @apply bg-surface-code rounded-md p-6 text-white font-mono;
+  }
+
+  .badge-section {
+    @apply inline-block px-3 py-1 bg-brand-green-soft text-brand-green text-micro-uppercase rounded-full tracking-wider;
+  }
+
+  .badge-tag {
+    @apply inline-block px-2 py-0.5 bg-surface text-steel text-caption-bold rounded-sm;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .will-change-transform {
+    will-change: transform, opacity;
+  }
+}
+
+/* Lenis smooth scroll */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}

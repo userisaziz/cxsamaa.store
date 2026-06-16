@@ -13,10 +13,16 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import uuid
 from urllib.parse import urlparse
+
+from botocore.exceptions import ConnectionClosedError, EndpointConnectionError
+from boto3.s3.transfer import TransferConfig
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from urllib3.exceptions import ProtocolError
 
 from src.config import settings
 from src.models.recording import Recording, RecordingStatus
@@ -172,15 +178,39 @@ def _download_audio_sync_streaming(file_url: str, dest_path: str) -> None:
                 f.write(chunk)
 
 
+@retry(
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=5, max=60),
+    retry=retry_if_exception_type((
+        ConnectionClosedError,
+        EndpointConnectionError,
+        ProtocolError,
+        TimeoutError,
+        socket.timeout,
+    )),
+    reraise=True,
+)
 def _upload_audio_from_file_sync(storage, file_path: str, key: str) -> str:
     """Upload a file from disk path — avoids loading entire chunk into RAM.
 
     Uses boto3's upload_file for R2 (multipart streaming from disk).
     Falls back to LocalStorage's write-bytes path.
+    
+    Retry strategy: Retries up to 4 times with exponential backoff (5s, 10s, 20s, 40s)
+    for transient network failures (timeout, connection closed, protocol errors).
     """
     # R2/boto3: use upload_file which streams from disk via multipart upload
     if hasattr(storage, "client") and hasattr(storage.client, "upload_file"):
-        storage.client.upload_file(file_path, storage.bucket, key)
+        # Force smaller multipart chunks to reduce retry cost on network drop
+        transfer_config = TransferConfig(
+            multipart_threshold=8 * 1024 * 1024,  # Use multipart for files > 8MB
+            multipart_chunksize=8 * 1024 * 1024,  # Split into 8MB chunks
+            max_concurrency=4,                    # Upload 4 chunks in parallel
+            use_threads=True,
+        )
+        
+        logger.info("Uploading %s to R2: %s", file_path, key)
+        storage.client.upload_file(file_path, storage.bucket, key, Config=transfer_config)
         logger.debug("Uploaded %s to R2: %s", file_path, key)
         return key
 
