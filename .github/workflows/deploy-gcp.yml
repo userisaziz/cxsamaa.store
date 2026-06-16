@@ -1,7 +1,7 @@
 # deploy-gcp.yml — Deploy 3 services to GCP Cloud Run
 #
 # Triggers: push to main
-# Auth:     GCP service account key (GCP_SA_KEY secret)
+# Auth:     Workload Identity Federation (no keys!)
 # Build:    Cloud Build via cloudbuild.yaml
 # Services: samaa-api (FastAPI) + samaa-web (Next.js) + samaa-landing (Vite SPA)
 name: Deploy to GCP Cloud Run
@@ -58,8 +58,8 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/434772660474/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-deployer@cxsamaa.iam.gserviceaccount.com'
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
