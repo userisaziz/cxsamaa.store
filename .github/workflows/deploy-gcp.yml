@@ -17,6 +17,11 @@ on:
       - 'cloudbuild.yaml'
       - '.github/workflows/deploy-gcp.yml'
 
+# Required for Workload Identity Federation
+permissions:
+  id-token: write
+  contents: read
+
 concurrency:
   group: gcp-deploy
   cancel-in-progress: false
