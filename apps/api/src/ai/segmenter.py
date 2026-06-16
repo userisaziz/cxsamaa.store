@@ -95,6 +95,9 @@ def segment_conversations(
 ) -> list[dict[str, Any]]:
     """Segment a flat list of transcript segments into discrete conversations.
 
+    Uses LLM-first approach for robust conversation detection, with deterministic
+    rules as fallback when LLM fails.
+
     Args:
         transcript_segments: List of {start, end, text, speaker} dicts
         silence_gaps: Optional list of (start, end) silence gap tuples from preprocessing
@@ -116,21 +119,27 @@ def segment_conversations(
 
     logger.info(f"Segmenting {len(transcript_segments)} transcript segments into conversations")
 
-    # Step 1: Find conversation boundaries
+    # Step 1: Try LLM-based segmentation first (handles single-segment, multi-speaker,
+    # and continuous speech cases that deterministic rules miss)
+    conversations = _llm_segmentation(transcript_segments)
+    if conversations:
+        logger.info(f"LLM segmentation produced {len(conversations)} conversations")
+        return conversations
+
+    logger.info("LLM segmentation returned 0 conversations — falling back to deterministic rules")
+
+    # Step 2: Fallback to deterministic rules (silence gaps, greetings, farewells)
     boundaries = _find_boundaries(transcript_segments, silence_gaps or [])
 
-    # Step 1b: Merge adjacent farewell+greeting boundaries.
-    # When segment[i] has a farewell and segment[i+1] has a greeting,
-    # both create boundaries at i and i+1. Keep only i+1 so the greeting
-    # starts the new conversation (not ends the old one).
+    # Step 2b: Merge adjacent farewell+greeting boundaries.
     boundaries = _merge_farewell_greeting_boundaries(
         transcript_segments, boundaries
     )
 
-    # Step 2: Split segments into conversations based on boundaries
+    # Step 3: Split segments into conversations based on boundaries
     conversations = _split_into_conversations(transcript_segments, boundaries)
 
-    # Step 3: Filter out too-short / trivial conversations
+    # Step 4: Filter out too-short / trivial conversations
     conversations = _filter_conversations(conversations)
 
     logger.info(f"Produced {len(conversations)} conversations from {len(transcript_segments)} segments")
@@ -276,6 +285,29 @@ def _make_conversation(segments: list[dict]) -> dict[str, Any]:
     }
 
 
+def _make_single_conversation(segments: list[dict]) -> dict[str, Any]:
+    """Create a single conversation from all segments (fallback when LLM fails)."""
+    if not segments:
+        return None
+    
+    start_time = segments[0]["start"]
+    end_time = segments[-1]["end"]
+    duration = end_time - start_time
+    
+    # Only create if meets minimum duration
+    if duration < MIN_CONVERSATION_DURATION:
+        logger.warning(f"Recording too short for single conversation: {duration:.1f}s")
+        return None
+    
+    logger.info(f"Creating single conversation from {len(segments)} segments ({start_time:.1f}s-{end_time:.1f}s)")
+    return {
+        "start_time": start_time,
+        "end_time": end_time,
+        "segments": segments,
+        "segment_count": len(segments),
+    }
+
+
 def _filter_conversations(conversations: list[dict]) -> list[dict]:
     """Remove conversations that are too short or have too few segments."""
     filtered = []
@@ -312,10 +344,184 @@ def _text_matches_patterns(text: str, patterns: list[str]) -> bool:
     elif patterns is DIRECT_QUESTION_PATTERNS:
         compiled = _COMPILED_QUESTION
     else:
-        compiled = None
+        compiled = [re.compile(p, re.IGNORECASE) for p in patterns]
 
-    if compiled is not None:
-        return any(rx.search(text_lower) for rx in compiled)
+    for pattern in compiled:
+        if pattern.search(text_lower):
+            return True
+    return False
 
-    # Fallback for any custom pattern list
-    return any(re.search(p, text_lower, re.IGNORECASE) for p in patterns)
+
+def _llm_segmentation(
+    transcript_segments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """LLM-based intelligent conversation segmentation.
+
+    Uses LLM to analyze transcript text and identify conversation boundaries.
+    Works for:
+    - Single long transcript segment containing multiple conversations
+    - Multi-speaker recordings merged into 1 segment by STT
+    - Continuous speech with clear topic/context shifts
+    """
+    import json
+    from src.ai.nvidia_client import nvidia_client
+
+    # Combine all segment text with timestamps
+    full_text = "\n".join(
+        f"[{seg['start']:.1f}s - {seg['end']:.1f}s] {seg.get('speaker', 'Unknown')}: {seg.get('text', '')}"
+        for seg in transcript_segments
+    )
+
+    if len(full_text.strip()) < 20:
+        logger.warning("Transcript too short for LLM analysis")
+        return []
+
+    # Build prompt for conversation detection
+    prompt = f"""Analyze this transcript and identify distinct customer conversations.
+
+A "conversation" is a complete customer interaction, which may or may not include formal greetings/farewells.
+
+CRITICAL RULES FOR DETECTING CONVERSATIONS:
+
+1. DIRECT QUESTION STARTS (no greeting):
+   - Customers often start with immediate questions: "How much?", "Where is...?", "Do you have...?"
+   - These mark the START of a new conversation even without "hello" or "welcome"
+   - Look for: price inquiries, location questions, availability checks, product requests
+
+2. ABRUPT ENDINGS (no farewell):
+   - Many conversations end without "goodbye" or "thank you"
+   - Detect endings by: topic completion, long pauses after last exchange, customer walking away cues
+   - The absence of a farewell does NOT mean the conversation continues
+
+3. CONTEXT TRANSITIONS (no explicit markers):
+   - Different customers interact sequentially with the salesperson
+   - Each customer interaction is a SEPARATE conversation, even if they overlap in time
+   - Detect transitions by: different customer voices/topics, new product inquiries, reset of discussion context
+
+4. EXTENDED SESSIONS (continuous engagement):
+   - A single customer may browse, ask multiple questions, then make a purchase
+   - This is ONE conversation if the same customer stays engaged
+   - Detect continuity by: same customer continuing their inquiry, logical topic progression, no long breaks
+
+5. CONTEXTUAL BOUNDARIES:
+   - Topic shifts: e.g., from discussing shoes to asking about shirts = likely different customers
+   - Transaction completions: payment discussion, wrapping items, final price agreement = conversation ending
+   - Speaker changes: new voice pattern asking unrelated questions = new conversation starting
+
+TRANSCRIPT:
+{full_text}
+
+Respond in JSON format:
+{{
+  "conversations": [
+    {{
+      "start_time": <float seconds - when this customer interaction begins>,
+      "end_time": <float seconds - when this customer interaction ends>,
+      "summary": "<brief description: e.g., 'Customer inquiring about shoe prices and availability'>",
+      "confidence": <0.0-1.0 - your confidence this is a distinct conversation>
+    }}
+  ]
+}}
+
+IMPORTANT GUIDELINES:
+- If the entire transcript is ONE continuous customer interaction, return a single conversation entry
+- If you detect multiple customers interacting separately, return multiple conversation entries
+- Use contextual cues (topic shifts, speaker changes, transaction completion) to determine boundaries
+- Don't require greetings/farewells — many real conversations lack them
+- Focus on: when does one customer's interaction END and another's BEGIN?
+- If uncertain, prefer fewer, longer conversations over many short fragmented ones
+
+Focus on speaker changes, topic shifts, transaction patterns, and contextual flow."""
+
+    try:
+        response_text = nvidia_client.chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert at analyzing retail sales conversations. You excel at identifying distinct customer interactions by analyzing contextual flow, topic shifts, speaker patterns, and transaction boundaries. You understand that real conversations often lack formal greetings/farewells and customers frequently start with direct questions. Always respond with valid JSON only.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=1000,
+            response_format={"type": "json_object"},
+        )
+
+        # Debug: log raw response
+        logger.info(f"LLM response (first 200 chars): {response_text[:200]}")
+
+        if not response_text or not response_text.strip():
+            logger.warning("LLM returned empty response — using entire recording as 1 conversation")
+            return [_make_single_conversation(transcript_segments)]
+
+        try:
+            response = json.loads(response_text)
+        except json.JSONDecodeError as e:
+            logger.error(f"LLM returned invalid JSON: {e}")
+            logger.error(f"Raw response: {response_text[:500]}")
+            logger.warning("Falling back to single conversation from entire recording")
+            return [_make_single_conversation(transcript_segments)]
+
+        conversations_data = response.get("conversations", [])
+        if not conversations_data:
+            logger.info("LLM found no conversation boundaries")
+            # If we have substantial content, treat entire recording as 1 conversation
+            # rather than returning 0 conversations
+            if len(full_text.strip()) > 100:
+                logger.info("Substantial transcript detected — creating single conversation as fallback")
+                return [_make_single_conversation(transcript_segments)]
+            return []
+
+        # Build conversation objects from LLM response
+        result = []
+        for conv_data in conversations_data:
+            start_time = float(conv_data.get("start_time", 0))
+            end_time = float(conv_data.get("end_time", 0))
+            confidence = float(conv_data.get("confidence", 0.5))
+
+            # Find segments that overlap with this conversation's time range
+            # (use overlap, not strict containment — LLM boundaries are approximate)
+            conv_segments = [
+                seg for seg in transcript_segments
+                if seg["start"] < end_time and seg["end"] > start_time
+            ]
+
+            logger.info(f"LLM conversation {start_time}-{end_time}s: found {len(conv_segments)} segments")
+            for seg in conv_segments:
+                logger.info(f"  Segment: {seg['start']}-{seg['end']}s speaker={seg.get('speaker', '?')}")
+
+            if len(conv_segments) < 1:
+                # Edge case: LLM detected conversation but no segments match
+                # Use all segments if this is a single-segment transcript
+                if len(transcript_segments) == 1:
+                    logger.info("Single-segment transcript — using it for LLM conversation")
+                    conv_segments = transcript_segments
+                else:
+                    logger.warning(f"LLM conversation has no segments: {start_time}-{end_time}s")
+                    continue
+
+            # Filter by duration and confidence
+            duration = end_time - start_time
+            if duration < MIN_CONVERSATION_DURATION:
+                logger.debug(f"LLM conversation too short: {duration:.1f}s")
+                continue
+
+            if confidence < 0.5:
+                logger.debug(f"LLM conversation low confidence: {confidence:.2f}")
+                continue
+
+            result.append({
+                "start_time": start_time,
+                "end_time": end_time,
+                "segments": conv_segments,
+                "segment_count": len(conv_segments),
+            })
+
+        return result
+
+    except Exception as e:
+        logger.error(f"LLM segmentation failed: {e}", exc_info=True)
+        # Fallback: create single conversation from entire recording
+        logger.warning("Creating single conversation from entire recording as fallback")
+        single_conv = _make_single_conversation(transcript_segments)
+        return [single_conv] if single_conv else []

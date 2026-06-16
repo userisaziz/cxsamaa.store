@@ -80,10 +80,14 @@ class PyannoteDiarizer:
         # This gives us per-segment speaker embeddings (vectors) that can be clustered
         # across chunks to unify speaker identity.
         try:
-            self.embedding_inference = Inference(
+            from pyannote.audio import Model
+            
+            # Load the embedding model with token, then wrap in Inference
+            embedding_model = Model.from_pretrained(
                 "pyannote/embedding",
                 token=self.huggingface_token,
             )
+            self.embedding_inference = Inference(embedding_model, window="whole")
             self.embedding_inference.to(torch.device(self.device))
             self._has_embeddings = True
             logger.info("Pyannote embedding model loaded for speaker reconciliation")
@@ -148,11 +152,13 @@ class PyannoteDiarizer:
             diarization = self.pipeline(tmp_path)
             
             # Convert to segment list
+            # pyannote.audio 3.x: diarization is directly iterable
+            # Returns (segment, track, speaker) tuples
             segments = []
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
+            for segment, track, speaker in diarization:
                 segments.append({
-                    "start": round(turn.start, 3),
-                    "end": round(turn.end, 3),
+                    "start": round(segment.start, 3),
+                    "end": round(segment.end, 3),
                     "speaker": f"SPEAKER_{speaker}",
                 })
 
