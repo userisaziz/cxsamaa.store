@@ -474,4 +474,47 @@ async def get_salespeople_comparison(
             avg_closing_score=round(avg_closing, 1) if avg_closing is not None else None,
         ))
 
-    return AnalyticsSalespeopleResponse(salespeople=items)
+    # Calculate top objections across all salespeople in scope
+    # Build recording IDs query for all salespeople we already fetched
+    sp_ids = [sp.id for sp in salespeople]
+    
+    if sp_ids:
+        rec_ids_for_objections = select(Recording.id).where(
+            Recording.salesperson_id.in_(sp_ids)
+        )
+        
+        # Apply date filter if provided
+        if date_from:
+            rec_ids_for_objections = rec_ids_for_objections.where(Recording.created_at >= date_from)
+        if date_to:
+            rec_ids_for_objections = rec_ids_for_objections.where(Recording.created_at <= date_to.replace(hour=23, minute=59, second=59))
+        
+        conv_ids_for_objections = select(Conversation.id).where(
+            Conversation.recording_id.in_(rec_ids_for_objections)
+        )
+        
+        objections_q = select(ConversationAnalysis.objections).where(
+            ConversationAnalysis.conversation_id.in_(conv_ids_for_objections),
+            ConversationAnalysis.objections.isnot(None),
+            ConversationAnalysis.objections != func.jsonb_build_array(),
+        )
+        objections_result = await db.execute(objections_q)
+        objection_counter: Counter = Counter()
+        for (objections_list,) in objections_result.all():
+            if isinstance(objections_list, list):
+                for obj in objections_list:
+                    if isinstance(obj, dict):
+                        issue = obj.get("issue", "")
+                        if issue:
+                            objection_counter[issue] += 1
+                    elif isinstance(obj, str) and obj:
+                        objection_counter[obj] += 1
+        
+        top_objections = [
+            ObjectionCount(objection=obj, count=cnt)
+            for obj, cnt in objection_counter.most_common(10)
+        ]
+    else:
+        top_objections = []
+
+    return AnalyticsSalespeopleResponse(salespeople=items, top_objections=top_objections)

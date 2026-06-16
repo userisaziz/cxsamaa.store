@@ -59,3 +59,4 @@ class SalespersonComparisonItem(BaseModel):
 
 class AnalyticsSalespeopleResponse(BaseModel):
     salespeople: list[SalespersonComparisonItem]
+    top_objections: list[ObjectionCount] = []
