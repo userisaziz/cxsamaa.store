@@ -399,8 +399,8 @@ async def get_salespeople_comparison(
         if date_from:
             rec_ids_q = rec_ids_q.where(Recording.created_at >= date_from)
         if date_to:
-            # Include full end date
-            rec_ids_q = rec_ids_q.where(Recording.created_at <= date_to.replace(hour=23, minute=59, second=59))
+            # Include full end date: created_at < next day
+            rec_ids_q = rec_ids_q.where(Recording.created_at < date_to + timedelta(days=1))
         
         conv_ids_q = select(Conversation.id).where(
             Conversation.recording_id.in_(rec_ids_q)
@@ -487,7 +487,7 @@ async def get_salespeople_comparison(
         if date_from:
             rec_ids_for_objections = rec_ids_for_objections.where(Recording.created_at >= date_from)
         if date_to:
-            rec_ids_for_objections = rec_ids_for_objections.where(Recording.created_at <= date_to.replace(hour=23, minute=59, second=59))
+            rec_ids_for_objections = rec_ids_for_objections.where(Recording.created_at < date_to + timedelta(days=1))
         
         conv_ids_for_objections = select(Conversation.id).where(
             Conversation.recording_id.in_(rec_ids_for_objections)

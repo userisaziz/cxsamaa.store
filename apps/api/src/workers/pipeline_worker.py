@@ -19,7 +19,6 @@ NOT responsible for:
 import logging
 
 from src.workers.celery_app import app
-from src.workers.pipeline import run_stage
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,7 @@ def execute_stage(
         pipeline_version,
         force_rerun,
     )
+    from src.workers.pipeline import run_stage  # lazy import to avoid circular dependency
     run_stage(recording_id, pipeline_version, stage_index, force_rerun)
 
 

@@ -43,9 +43,9 @@ class Settings(BaseSettings):
     nvidia_embedding_model: str = "nvidia/llama-3.2-nv-embedqa-1b-v2"
     nvidia_timeout: int = 300  # 5 minutes per API call
 
-    # STT Provider (NVIDIA Riva with Deepgram fallback)
-    stt_provider: str = "riva"  # STT provider (default: "riva")
-    stt_fallback_provider: str = "deepgram"  # Fallback STT when primary fails (default: "deepgram")
+    # STT Provider (Deepgram with built-in diarization)
+    stt_provider: str = "deepgram"  # STT provider (default: "deepgram" — includes speaker diarization)
+    stt_fallback_provider: str = "riva"  # Fallback STT when Deepgram fails (default: "riva")
 
     # Deepgram STT (fallback provider)
     deepgram_api_key: str = ""
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     deepseek_timeout: int = 120
 
     # Pyannote.audio (Local Diarization)
-    enable_diarization: bool = True  # Enable speaker diarization (set False to skip diarization stage)
+    enable_diarization: bool = False  # Disabled pyannote; using Deepgram built-in diarization instead
     diarization_use_pyannote: bool = True  # Enable pyannote as primary diarizer
     pyannote_hf_token: str = ""  # HuggingFace token for gated pyannote models
     pyannote_model_name: str = "pyannote/speaker-diarization-3.1"
@@ -78,9 +78,13 @@ class Settings(BaseSettings):
 
     # Audio Chunking for Long Recordings
     # 10 min of 16 kHz mono WAV ≈ 19.2 MB (well under typical API limits)
-    audio_chunk_duration_minutes: int = 10  # 10-minute chunks
-    audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks
+    audio_chunk_duration_minutes: int = 10  # 10-minute chunks (max)
+    audio_chunk_overlap_seconds: int = 30  # 30-second overlap between chunks (only at forced splits)
     max_audio_chunk_bytes: int = 25 * 1024 * 1024  # 25MB max per chunk
+
+    # VAD-driven chunking (replaces time-based chunking with speech-aware boundaries)
+    vad_driven_chunking: bool = True  # Use VAD speech segments as primary split points
+    vad_chunk_min_silence_for_boundary: float = 2.0  # Minimum silence (seconds) between VAD segments to create a chunk boundary
 
     # GCP Cloud Run & Cloud Tasks
     gcp_project: str = ""  # Set to your GCP project ID

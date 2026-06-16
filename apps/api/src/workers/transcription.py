@@ -1,10 +1,12 @@
-"""Speech-to-text worker — transcribes audio using NVIDIA Parakeet STT."""
-import io
+"""Speech-to-text worker — transcribes audio using NVIDIA Parakeet STT.
+
+Chunking is driven by the manifest produced in preprocessing (VAD-aware,
+silence-driven). Transcription uses per-chunk VAD segments from the manifest
+for silence-stripping before STT — no redundant VAD detection at this stage.
+"""
 import logging
 import time
 import uuid
-
-from pydub import AudioSegment
 
 from src.ai.stt import transcribe_audio
 from src.config import settings
@@ -133,11 +135,59 @@ def _transcribe_with_retry(
 
 
 # ---------------------------------------------------------------------------
-# VAD integration (lazy imports — torch/torchaudio may not be installed)
+# VAD audio filtering using pre-computed segments (no detection at this stage)
 # ---------------------------------------------------------------------------
 
+def _filter_audio_with_vad_segments(
+    audio_bytes: bytes,
+    vad_segments: list[dict],
+) -> tuple[bytes, list[dict]]:
+    """Filter audio using pre-computed VAD segments from the manifest.
+
+    Unlike _apply_vad_filter (which runs full VAD detection + extraction),
+    this uses VAD segments already computed during preprocessing. Only
+    the extraction step runs — silently skipping the expensive detection.
+
+    Args:
+        audio_bytes: Raw chunk audio data (16kHz mono WAV)
+        vad_segments: VAD speech segments from manifest (relative to chunk start)
+
+    Returns:
+        (filtered_audio_bytes, speech_segments)
+        If no segments provided, returns (original_audio, []).
+    """
+    if not vad_segments:
+        return audio_bytes, []
+
+    try:
+        from src.ai.vad import extract_speech_regions
+        filtered = extract_speech_regions(audio_bytes, vad_segments)
+        size_before = len(audio_bytes)
+        size_after = len(filtered)
+        if size_before > 0:
+            reduction = (1 - size_after / size_before) * 100
+            logger.debug(
+                "VAD pre-filter: %.1fMB → %.1fMB (%.0f%% reduction, %d segments)",
+                size_before / (1024 * 1024),
+                size_after / (1024 * 1024),
+                reduction,
+                len(vad_segments),
+            )
+        return filtered, vad_segments
+    except ImportError:
+        logger.warning("VAD deps unavailable — skipping audio filter")
+        return audio_bytes, []
+    except Exception as exc:
+        logger.warning("VAD pre-filter failed (%s) — using original audio", exc)
+        return audio_bytes, []
+
+
 def _apply_vad_filter(audio_bytes: bytes) -> tuple[bytes, list[dict]]:
-    """Apply VAD silence filtering to audio bytes.
+    """Apply VAD silence filtering to audio bytes (legacy — uses full VAD detection).
+
+    Prefer _filter_audio_with_vad_segments() when pre-computed VAD segments
+    are available from the manifest. This function is retained for backward
+    compatibility with the short-recording fast path where no manifest VAD exists.
 
     Wraps vad_filter_audio with lazy import and graceful fallback.
     Returns (filtered_audio, speech_segments) or (original_audio, []) on failure.
@@ -245,7 +295,7 @@ def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[
         for seg in segments:
             transcript_seg = TranscriptSegment(
                 recording_id=uuid.UUID(recording_id),
-                speaker_label="UNKNOWN",  # Will be updated by diarization
+                speaker_label=seg.get("speaker", "UNKNOWN"),
                 start_time=seg["start"],
                 end_time=seg["end"],
                 text=seg["text"],
@@ -266,7 +316,7 @@ def _store_transcript_sync(recording_id: str, segments: list[dict], words: list[
                     start_time=word_data["start"],
                     end_time=word_data["end"],
                     confidence=word_data["confidence"],
-                    speaker_label="UNKNOWN",  # Will be updated by diarization
+                    speaker_label=word_data.get("speaker", "UNKNOWN"),
                 )
                 session.add(word_transcript)
 
@@ -281,7 +331,13 @@ from src.workers.retry import pipeline_retry
 
 @pipeline_retry
 def transcribe_audio_task(recording_id: str) -> str:
-    """Transcribe preprocessed audio using configured STT provider (Groq Whisper or NVIDIA Riva).
+    """Transcribe a short recording (no chunking needed) in a single STT call.
+
+    This is the fast path for recordings short enough to fit in one API call.
+    Uses VAD segments from the manifest for silence-stripping before STT.
+
+    For chunked recordings, dispatch_transcription() handles parallel
+    chunk processing via transcribe_chunk() instead.
 
     Args:
         recording_id: The recording to transcribe
@@ -289,7 +345,7 @@ def transcribe_audio_task(recording_id: str) -> str:
     Returns:
         recording_id for the next pipeline stage
     """
-    logger.info("[%s] Starting transcription", recording_id)
+    logger.info("[%s] Starting single-shot transcription", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
 
     try:
@@ -298,49 +354,28 @@ def transcribe_audio_task(recording_id: str) -> str:
             raise ValueError(f"Recording {recording_id} not found")
 
         storage = get_storage()
+        manifest = load_manifest(recording_id)
 
         # Download preprocessed audio
         preprocessed_key = f"preprocessed/{recording_id}/audio.wav"
         logger.info("[%s] Downloading preprocessed audio", recording_id)
         audio_data = storage.download_sync(preprocessed_key)
 
-        # For large files, chunk the audio (use 15-minute chunks with 30-second overlap)
-        chunk_duration_ms = settings.audio_chunk_duration_minutes * 60 * 1000  # 15 minutes
-        overlap_ms = settings.audio_chunk_overlap_seconds * 1000  # 30 seconds
-
-        # Calculate audio duration and max chunk size
-        audio = AudioSegment.from_wav(io.BytesIO(audio_data))
-        duration_ms = len(audio)
-        max_chunk_size = settings.max_audio_chunk_bytes  # from settings
-
-        if len(audio_data) <= max_chunk_size and duration_ms <= chunk_duration_ms:
-            # File is small enough and short enough — single-shot transcription
-            # Apply VAD filter to strip silence before STT
-            speech_segments = []
-            if settings.vad_filter_before_stt:
-                audio_data, speech_segments = _apply_vad_filter(audio_data)
-
-            result = transcribe_audio(audio_data)
-            segments = result.get("segments", [])
-            words = result.get("words", [])
-
-            # Remap timestamps if VAD was applied
-            if speech_segments:
-                segments, words = _remap_timestamps(segments, words, speech_segments)
-        else:
-            # File too large or too long — chunk for STT provider limits
-            # (Groq Whisper has 25 MB file limit)
-            logger.info(
-                "[%s] Audio needs chunking: %.1f MB, %.1f min (limit: %d MB, %d min)",
-                recording_id,
-                len(audio_data) / (1024 * 1024),
-                duration_ms / 60000,
-                max_chunk_size // (1024 * 1024),
-                chunk_duration_ms // 60000,
+        # Use VAD segments from manifest for silence-stripping before STT
+        speech_segments: list[dict] = []
+        chunk_vad = manifest.get("chunks", [{}])[0].get("vad_segments", [])
+        if settings.vad_filter_before_stt and chunk_vad:
+            audio_data, speech_segments = _filter_audio_with_vad_segments(
+                audio_data, chunk_vad,
             )
-            segments, words = _transcribe_in_chunks_with_overlap(
-                audio_data, recording_id, chunk_duration_ms, overlap_ms
-            )
+
+        result = transcribe_audio(audio_data)
+        segments = result.get("segments", [])
+        words = result.get("words", [])
+
+        # Remap timestamps if VAD filtering was applied
+        if speech_segments:
+            segments, words = _remap_timestamps(segments, words, speech_segments)
 
         if not segments:
             fail_and_halt(recording_id, "No transcript segments produced by STT")
@@ -349,11 +384,11 @@ def transcribe_audio_task(recording_id: str) -> str:
         _store_transcript_sync(recording_id, segments, words)
 
         logger.info("[%s] Transcription complete: %d segments", recording_id, len(segments))
-        
+
         # Mark stage complete in pipeline_state
         from src.services.pipeline_state import mark_stage_complete_sync
         mark_stage_complete_sync(recording_id, "stt")
-        
+
         return recording_id
 
     except PipelineHalted:
@@ -361,7 +396,7 @@ def transcribe_audio_task(recording_id: str) -> str:
     except Exception as exc:
         logger.error("[%s] Transcription failed: %s", recording_id, exc, exc_info=True)
         _update_recording_status_sync(recording_id, RecordingStatus.FAILED, str(exc))
-        
+
         # Mark stage failed in pipeline_state
         from src.services.pipeline_state import mark_stage_failed_sync
         mark_stage_failed_sync(recording_id, "stt", str(exc))
@@ -377,7 +412,8 @@ def dispatch_transcription(recording_id: str):
 
     Reads the chunk manifest produced by preprocessing. If the recording
     is short enough, uses the fast path. Otherwise processes chunks in
-    parallel via ThreadPoolExecutor.
+    parallel via ThreadPoolExecutor, passing per-chunk VAD segments
+    from the manifest to avoid redundant VAD detection.
     """
     logger.info("[%s] Dispatching transcription", recording_id)
     _update_recording_status_sync(recording_id, RecordingStatus.TRANSCRIBING)
@@ -402,6 +438,7 @@ def dispatch_transcription(recording_id: str):
                 recording_id,
                 chunk["index"],
                 chunk["file"],
+                chunk.get("vad_segments", []),
             )
             for chunk in manifest["chunks"]
         ]
@@ -410,18 +447,29 @@ def dispatch_transcription(recording_id: str):
     return merge_transcription_results(results, recording_id)
 
 
-def _transcribe_chunk_fn(recording_id: str, chunk_index: int, chunk_file: str):
+def _transcribe_chunk_fn(
+    recording_id: str,
+    chunk_index: int,
+    chunk_file: str,
+    vad_segments: list[dict],
+):
     """Wrapper for transcribe_chunk that can be submitted to ThreadPoolExecutor."""
-    return transcribe_chunk(recording_id, chunk_index, chunk_file)
+    return transcribe_chunk(recording_id, chunk_index, chunk_file, vad_segments)
 
 
 @pipeline_retry
-def transcribe_chunk(recording_id: str, chunk_index: int, chunk_file: str):
+def transcribe_chunk(
+    recording_id: str,
+    chunk_index: int,
+    chunk_file: str,
+    vad_segments: list[dict] | None = None,
+):
     """Transcribe a single audio chunk. Idempotent with acks_late.
 
     Downloads only its own chunk file (~28MB for 15-min WAV) from storage,
-    not the full recording. Applies VAD filtering to strip silence before
-    sending to the STT API, then remaps timestamps back to original timeline.
+    not the full recording. Uses pre-computed VAD segments from the manifest
+    to strip silence before sending to the STT API (no redundant VAD detection),
+    then remaps timestamps back to original timeline.
 
     Returns a dict (JSON-serializable) — never raises past max_retries,
     returns a failure sentinel instead to prevent chord errors.
@@ -434,13 +482,16 @@ def transcribe_chunk(recording_id: str, chunk_index: int, chunk_file: str):
         chunk_key = f"preprocessed/{recording_id}/chunks/{chunk_file}"
         chunk_data = storage.download_sync(chunk_key)
 
-        # Apply VAD filter: strip silence before STT (saves 40-60% API cost)
-        speech_segments = []
-        if settings.vad_filter_before_stt:
-            filtered_data, speech_segments = _apply_vad_filter(chunk_data)
+        # Apply VAD filter using pre-computed segments from preprocessing
+        # (no VAD detection at this stage — segments are already computed)
+        speech_segments: list[dict] = []
+        if settings.vad_filter_before_stt and vad_segments:
+            filtered_data, speech_segments = _filter_audio_with_vad_segments(
+                chunk_data, vad_segments,
+            )
             if speech_segments:
                 logger.info(
-                    "[%s] Chunk %d VAD: %.1fMB → %.1fMB (%d speech segments)",
+                    "[%s] Chunk %d VAD pre-filter: %.1fMB → %.1fMB (%d segments)",
                     recording_id, chunk_index,
                     len(chunk_data) / (1024 * 1024),
                     len(filtered_data) / (1024 * 1024),
@@ -563,103 +614,6 @@ def merge_transcription_results(chunk_results: list, recording_id: str):
     )
 
     return recording_id
-
-
-def _transcribe_in_chunks_with_overlap(
-    audio_data: bytes,
-    recording_id: str,
-    chunk_duration_ms: int,
-    overlap_ms: int,
-) -> tuple[list[dict], list[dict]]:
-    """Split large audio into chunks with overlap and transcribe each.
-
-    Uses 15-minute chunks with 30-second overlap to maintain context across boundaries.
-    Deduplicates words in overlap regions by keeping higher-confidence versions.
-
-    Args:
-        audio_data: Raw audio bytes
-        recording_id: Recording identifier
-        chunk_duration_ms: Chunk duration in milliseconds
-        overlap_ms: Overlap duration in milliseconds
-
-    Returns:
-        Tuple of (segments, words) with deduplicated results
-    """
-    logger.info(
-        "[%s] Audio requires chunking: %ds chunks with %ds overlap",
-        recording_id,
-        chunk_duration_ms // 1000,
-        overlap_ms // 1000,
-    )
-
-    audio = AudioSegment.from_wav(io.BytesIO(audio_data))
-    duration_ms = len(audio)
-
-    all_segments = []
-    all_words = []
-    step_ms = chunk_duration_ms - overlap_ms  # Effective step between chunks
-
-    chunk_index = 0
-    for chunk_start_ms in range(0, duration_ms, step_ms):
-        chunk_end_ms = min(chunk_start_ms + chunk_duration_ms, duration_ms)
-        chunk = audio[chunk_start_ms:chunk_end_ms]
-
-        chunk_buffer = io.BytesIO()
-        chunk.export(chunk_buffer, format="wav")
-        chunk_bytes = chunk_buffer.getvalue()
-
-        logger.info(
-            "[%s] Transcribing chunk %d: %.0fs-%.0fs",
-            recording_id,
-            chunk_index + 1,
-            chunk_start_ms / 1000,
-            chunk_end_ms / 1000,
-        )
-
-        # Apply VAD filter per chunk to strip silence before STT
-        speech_segments = []
-        if settings.vad_filter_before_stt:
-            chunk_bytes, speech_segments = _apply_vad_filter(chunk_bytes)
-
-        result = transcribe_audio(chunk_bytes)
-        chunk_segments = result.get("segments", [])
-        chunk_words = result.get("words", [])
-
-        # Remap timestamps from VAD-filtered → original chunk timeline
-        if speech_segments:
-            chunk_segments, chunk_words = _remap_timestamps(
-                chunk_segments, chunk_words, speech_segments
-            )
-
-        # Adjust timestamps by chunk offset
-        offset_seconds = chunk_start_ms / 1000.0
-        chunk_end_seconds = chunk_end_ms / 1000.0
-
-        for seg in chunk_segments:
-            seg["start"] = max(seg["start"] + offset_seconds, offset_seconds)
-            seg["end"] = min(seg["end"] + offset_seconds, chunk_end_seconds)
-            if seg["start"] < seg["end"]:
-                all_segments.append(seg)
-
-        for word in chunk_words:
-            word["start"] = max(word["start"] + offset_seconds, offset_seconds)
-            word["end"] = min(word["end"] + offset_seconds, chunk_end_seconds)
-            if word["start"] < word["end"]:
-                all_words.append(word)
-
-        chunk_index += 1
-
-    # Deduplicate words and segments in overlap regions
-    all_words = _deduplicate_words(all_words)
-    all_segments = _deduplicate_segments(all_segments)
-
-    logger.info(
-        "[%s] Chunked transcription complete: %d segments, %d words (after dedup)",
-        recording_id,
-        len(all_segments),
-        len(all_words),
-    )
-    return all_segments, all_words
 
 
 def _deduplicate_words(words: list[dict], tolerance_ms: float = 50.0) -> list[dict]:

@@ -58,7 +58,7 @@ class DeepgramSTTClient:
                 smart_format=True,
                 utterances=True,
                 punctuate=True,
-                diarize=False,
+                diarize=True,
             )
             return self._parse_deepgram_response(response)
         except Exception as e:
@@ -69,12 +69,13 @@ class DeepgramSTTClient:
         """Parse Deepgram response into standardized segment and word format.
 
         Deepgram returns results with utterances and word-level timestamps.
-        We extract both segment-level and word-level data for speaker attribution.
+        When diarize=True, each utterance/word carries a speaker integer (0, 1, …)
+        which we map to "SPEAKER_0", "SPEAKER_1", etc.
 
         Returns:
             {
-                "segments": [{start, end, text}],
-                "words": [{word, start, end, confidence}]
+                "segments": [{start, end, text, speaker}],
+                "words": [{word, start, end, confidence, speaker}]
             }
         """
         segments = []
@@ -95,11 +96,13 @@ class DeepgramSTTClient:
         # Extract word-level timestamps first (needed for fallback segment boundaries)
         if hasattr(alternative, "words") and alternative.words:
             for word in alternative.words:
+                speaker_int = getattr(word, "speaker", None)
                 all_words.append({
                     "word": word.word,
                     "start": round(word.start, 3),
                     "end": round(word.end, 3),
                     "confidence": round(word.confidence, 3),
+                    "speaker": f"SPEAKER_{speaker_int}" if speaker_int is not None else "UNKNOWN",
                 })
 
         # ✅ FIX: utterances live at response.results.utterances, not alternative.utterances
@@ -108,10 +111,12 @@ class DeepgramSTTClient:
             for utterance in utterances:
                 if not utterance.transcript.strip():
                     continue
+                speaker_int = getattr(utterance, "speaker", None)
                 segments.append({
                     "start": round(utterance.start, 3),
                     "end": round(utterance.end, 3),
                     "text": utterance.transcript.strip(),
+                    "speaker": f"SPEAKER_{speaker_int}" if speaker_int is not None else "UNKNOWN",
                 })
 
         # Fallback: no utterances — build segments from words by grouping with silence gaps
@@ -120,19 +125,24 @@ class DeepgramSTTClient:
             current_group = [all_words[0]]
             for word in all_words[1:]:
                 if word["start"] - current_group[-1]["end"] > 1.5:
+                    # Determine speaker by majority vote in the group
+                    group_speaker = _majority_speaker(current_group)
                     segments.append({
                         "start": current_group[0]["start"],
                         "end": current_group[-1]["end"],
                         "text": " ".join(w["word"] for w in current_group),
+                        "speaker": group_speaker,
                     })
                     current_group = [word]
                 else:
                     current_group.append(word)
             if current_group:
+                group_speaker = _majority_speaker(current_group)
                 segments.append({
                     "start": current_group[0]["start"],
                     "end": current_group[-1]["end"],
                     "text": " ".join(w["word"] for w in current_group),
+                    "speaker": group_speaker,
                 })
 
         # Last-resort fallback: transcript string only, no word timestamps
@@ -164,6 +174,13 @@ class DeepgramSTTClient:
 
 # Singleton instance (lazy initialization)
 _deepgram_client: DeepgramSTTClient | None = None
+
+
+def _majority_speaker(words: list[dict]) -> str:
+    """Return the most frequent speaker label from a group of diarized words."""
+    from collections import Counter
+    speakers = [w.get("speaker", "UNKNOWN") for w in words]
+    return Counter(speakers).most_common(1)[0][0]
 
 
 def get_deepgram_client() -> DeepgramSTTClient:

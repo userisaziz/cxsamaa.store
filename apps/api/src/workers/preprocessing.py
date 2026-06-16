@@ -165,10 +165,11 @@ def _download_audio_sync_streaming(file_url: str, dest_path: str) -> None:
 
     # HTTP(S) — stream via requests
     import requests
-    with requests.get(file_url, stream=True, timeout=300) as r:
+    with requests.get(file_url, stream=True, timeout=900) as r:
         r.raise_for_status()
         with open(dest_path, "wb") as f:
-            shutil.copyfileobj(r.raw, f)
+            for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
+                f.write(chunk)
 
 
 def _upload_audio_from_file_sync(storage, file_path: str, key: str) -> str:
@@ -428,29 +429,39 @@ def _split_and_upload_chunks_ffmpeg(
 def _build_chunk_manifest(
     duration_ms: int,
     silence_gaps_ms: list[tuple[float, float]],
+    vad_segments: list[dict],
     recording_id: str,
 ) -> dict:
-    """Build a chunk manifest using silence-gap-aware splitting.
+    """Build a chunk manifest using VAD-aware, silence-driven splitting.
 
-    Strategy:
-    1. Use silence gaps >= 30s as preferred split points (split at midpoint).
-    2. If a speech region between two silence gaps exceeds max_chunk_duration,
-       fall back to fixed-window splitting within that region.
-    3. Apply overlap at each boundary for transcription continuity.
+    Strategy (VAD-driven, with ffmpeg silence gaps as fallback):
+    1. Collect natural boundary candidates from VAD silence gaps (>= 2s between
+       speech segments) and ffmpeg silence gaps (>= 30s). VAD boundaries are
+       preferred because they operate at finer granularity.
+    2. Walk the timeline: at each step, look ahead up to max_chunk_duration for
+       the farthest natural split point. If found, split there (no overlap).
+    3. If no natural split within max_chunk_duration, force-split at the time
+       limit and apply overlap for ASR continuity across the boundary.
+    4. Per-chunk VAD segments are clipped from the full-recording VAD output
+       and stored with timestamps relative to chunk start for direct use by
+       the transcription stage.
 
     Returns manifest dict consumed by dispatch_transcription and
     dispatch_diarization.
     """
     chunk_duration_ms = settings.audio_chunk_duration_minutes * 60 * 1000
     overlap_ms = settings.audio_chunk_overlap_seconds * 1000
+    min_vad_silence_s = settings.vad_chunk_min_silence_for_boundary
 
     needs_chunking = duration_ms > chunk_duration_ms
 
     if not needs_chunking:
+        # Short recording — single chunk with full VAD segments
         return {
             "recording_id": recording_id,
             "duration_ms": duration_ms,
             "needs_chunking": False,
+            "vad_speech_segments": vad_segments,
             "chunks": [
                 {
                     "index": 0,
@@ -459,65 +470,149 @@ def _build_chunk_manifest(
                     "audio_start_ms": 0,
                     "audio_end_ms": duration_ms,
                     "file": "chunk_000.wav",
+                    "boundary_type_before": None,
+                    "boundary_type_after": None,
+                    "vad_segments": vad_segments,
                 },
             ],
         }
 
-    # Derive preferred split points from silence gap midpoints
-    split_points = sorted({
-        (gap_start + gap_end) / 2.0
-        for gap_start, gap_end in silence_gaps_ms
-    })
+    # ── Step 1: Collect natural boundary candidates ──────────────────────
 
-    # Build raw boundaries: accept a split point if it's at least 1 min from
-    # the previous one (or half a chunk, whichever is larger)
-    min_gap = max(chunk_duration_ms * 0.5, 60_000)
-    raw_boundaries: list[float] = [0.0]
-    last = 0.0
-    for sp in split_points:
-        if sp - last >= min_gap:
-            raw_boundaries.append(sp)
-            last = sp
+    natural_boundaries_ms: list[float] = []
 
-    if raw_boundaries[-1] < duration_ms:
-        raw_boundaries.append(float(duration_ms))
+    # Type A: VAD silence gaps (gaps between speech segments >= min_silence)
+    if vad_segments and settings.vad_driven_chunking:
+        for i in range(len(vad_segments) - 1):
+            gap_start_s = vad_segments[i]["end"]
+            gap_end_s = vad_segments[i + 1]["start"]
+            gap_duration_s = gap_end_s - gap_start_s
+            if gap_duration_s >= min_vad_silence_s:
+                midpoint_ms = ((gap_start_s + gap_end_s) / 2.0) * 1000.0
+                natural_boundaries_ms.append(midpoint_ms)
 
-    # Sub-split any segment that still exceeds max chunk duration
-    final_boundaries: list[float] = []
-    for i in range(len(raw_boundaries) - 1):
-        seg_start = raw_boundaries[i]
-        seg_end = raw_boundaries[i + 1]
-        final_boundaries.append(seg_start)
-        if seg_end - seg_start > chunk_duration_ms:
-            sub = seg_start + chunk_duration_ms
-            while sub < seg_end:
-                final_boundaries.append(sub)
-                sub += chunk_duration_ms
-    final_boundaries.append(float(duration_ms))
+    # Track VAD-derived boundary count before ffmpeg merge
+    vad_boundary_count = len(natural_boundaries_ms)
 
-    # Build chunk list with overlap
-    n = len(final_boundaries) - 1
+    # Type B: ffmpeg silence gaps (30s+ gaps from silencedetect)
+    for gap_start, gap_end in silence_gaps_ms:
+        midpoint_ms = (gap_start + gap_end) / 2.0
+        natural_boundaries_ms.append(midpoint_ms)
+
+    # Deduplicate: merge boundaries within min_gap of each other
+    natural_boundaries_ms.sort()
+    min_gap_ms = max(chunk_duration_ms * 0.25, 60_000)  # at least 60s apart
+    deduped: list[float] = []
+    for pos in natural_boundaries_ms:
+        if not deduped or pos - deduped[-1] >= min_gap_ms:
+            deduped.append(pos)
+
+    logger.info(
+        "[%s] Natural boundary candidates: %d (from VAD=%d + ffmpeg=%d)",
+        recording_id,
+        len(deduped),
+        vad_boundary_count,
+        len(silence_gaps_ms),
+    )
+
+    # ── Step 2: Walk timeline, split at natural boundaries where possible ─
+
+    boundaries_ms: list[float] = [0.0]
+    is_natural: list[bool] = []  # is_natural[i] = True if boundary i→i+1 is natural
+
+    current_pos = 0.0
+    boundary_idx = 0
+
+    while current_pos < duration_ms:
+        look_ahead = min(current_pos + chunk_duration_ms, duration_ms)
+
+        # Find the farthest natural boundary within [current_pos, look_ahead]
+        best_natural = None
+        while boundary_idx < len(deduped) and deduped[boundary_idx] <= look_ahead:
+            candidate = deduped[boundary_idx]
+            # Must be at least 60s from current position (avoid splitting too close)
+            if candidate > current_pos + 60_000:
+                best_natural = candidate
+            boundary_idx += 1
+
+        if best_natural is not None:
+            # Split at natural boundary — no overlap needed
+            boundaries_ms.append(best_natural)
+            is_natural.append(True)
+            current_pos = best_natural
+        else:
+            # No natural boundary found — force split at time limit
+            if look_ahead >= duration_ms:
+                boundaries_ms.append(float(duration_ms))
+                is_natural.append(True)  # end of recording = natural
+            else:
+                boundaries_ms.append(look_ahead)
+                is_natural.append(False)  # forced split
+            current_pos = look_ahead
+
+    # ── Step 3: Build chunks with smart overlap ──────────────────────────
+
+    n = len(boundaries_ms) - 1
     chunks = []
+
     for i in range(n):
-        chunk_start = max(0.0, final_boundaries[i] - (overlap_ms if i > 0 else 0))
-        chunk_end = min(
-            final_boundaries[i + 1] + (overlap_ms if i < n - 1 else 0),
-            float(duration_ms),
+        chunk_start_ms = boundaries_ms[i]
+        chunk_end_ms = boundaries_ms[i + 1]
+
+        # Determine overlap: only at forced boundaries
+        need_overlap_before = (i > 0 and not is_natural[i - 1])
+        need_overlap_after = (i < n - 1 and not is_natural[i])
+
+        audio_start_ms = (
+            max(0.0, chunk_start_ms - overlap_ms) if need_overlap_before
+            else chunk_start_ms
         )
+        audio_end_ms = (
+            min(chunk_end_ms + overlap_ms, float(duration_ms)) if need_overlap_after
+            else chunk_end_ms
+        )
+
+        boundary_type_before = (
+            "natural" if is_natural[i - 1] else "forced"
+        ) if i > 0 else None
+        boundary_type_after = (
+            "natural" if is_natural[i] else "forced"
+        ) if i < n - 1 else None
+
+        # Per-chunk VAD segments: clip from full recording, make relative to
+        # audio_start_ms so transcription can use them directly
+        chunk_vad: list[dict] = []
+        if vad_segments:
+            chunk_start_s = audio_start_ms / 1000.0
+            chunk_end_s = audio_end_ms / 1000.0
+            for seg in vad_segments:
+                if seg["end"] > chunk_start_s and seg["start"] < chunk_end_s:
+                    clipped_start = max(seg["start"], chunk_start_s) - chunk_start_s
+                    clipped_end = min(seg["end"], chunk_end_s) - chunk_start_s
+                    if clipped_end > clipped_start:
+                        chunk_vad.append({
+                            "start": round(clipped_start, 3),
+                            "end": round(clipped_end, 3),
+                        })
+
         chunks.append({
             "index": i,
-            "start_ms": int(final_boundaries[i]),
-            "end_ms": int(final_boundaries[i + 1]),
-            "audio_start_ms": int(chunk_start),
-            "audio_end_ms": int(chunk_end),
+            "start_ms": int(chunk_start_ms),
+            "end_ms": int(chunk_end_ms),
+            "audio_start_ms": int(audio_start_ms),
+            "audio_end_ms": int(audio_end_ms),
             "file": f"chunk_{i:03d}.wav",
+            "boundary_type_before": boundary_type_before,
+            "boundary_type_after": boundary_type_after,
+            "vad_segments": chunk_vad,
         })
 
     logger.info(
-        "[%s] Manifest: %d chunks from %d silence gaps (duration=%ds, chunk_max=%ds)",
+        "[%s] Manifest: %d chunks (%d natural, %d forced), duration=%ds, max_chunk=%ds",
         recording_id,
         len(chunks),
-        len(silence_gaps_ms),
+        sum(1 for n in is_natural if n),
+        sum(1 for n in is_natural if not n),
         duration_ms // 1000,
         chunk_duration_ms // 1000,
     )
@@ -526,6 +621,7 @@ def _build_chunk_manifest(
         "recording_id": recording_id,
         "duration_ms": duration_ms,
         "needs_chunking": True,
+        "vad_speech_segments": vad_segments,
         "chunks": chunks,
     }
 
@@ -579,7 +675,7 @@ def preprocess_audio(recording_id: str) -> str:
             # ------------------------------------------------------------------
             # Use DB format instead of parsing URL (avoids pre-signed URL query params)
             # Extract file extension from MIME type (e.g., "audio/mpeg" -> "mp3")
-            format_value = recording.get('format', 'mp3').lower()
+            format_value = (recording.get('format') or 'mp3').lower()
             # Map MIME types to file extensions
             mime_to_ext = {
                 'audio/mpeg': 'mp3',
@@ -612,19 +708,47 @@ def preprocess_audio(recording_id: str) -> str:
             _update_recording_duration_sync(recording_id, duration_seconds)
 
             # ------------------------------------------------------------------
-            # 4. Detect silence gaps (ffmpeg silencedetect, streaming)
+            # 4. Detect VAD speech segments (Silero VAD on preprocessed WAV)
+            #    Run BEFORE silence detection — VAD gives finer boundaries
+            #    for chunk splitting. Falls back gracefully if torch unavailable.
+            # ------------------------------------------------------------------
+            vad_segments: list[dict] = []
+            if settings.vad_use_silero and settings.vad_driven_chunking:
+                logger.info("[%s] Detecting speech segments via Silero VAD", recording_id)
+                try:
+                    from src.ai.vad import detect_speech_segments_from_file
+                    vad_segments = detect_speech_segments_from_file(output_path)
+                    logger.info(
+                        "[%s] VAD: %d speech segments detected (%.1fs total speech)",
+                        recording_id,
+                        len(vad_segments),
+                        sum(s["end"] - s["start"] for s in vad_segments),
+                    )
+                except ImportError:
+                    logger.warning(
+                        "[%s] VAD deps (torch/torchaudio) unavailable — "
+                        "falling back to ffmpeg silence detection only",
+                        recording_id,
+                    )
+                except Exception as exc:
+                    logger.warning("[%s] VAD failed (%s) — falling back to ffmpeg only", recording_id, exc)
+
+            # ------------------------------------------------------------------
+            # 5. Detect silence gaps (ffmpeg silencedetect, streaming)
             # ------------------------------------------------------------------
             logger.info("[%s] Detecting silence gaps", recording_id)
             silence_gaps = _detect_silence_gaps_ffmpeg(output_path)
             _store_silence_gaps_sync(recording_id, silence_gaps)
 
             # ------------------------------------------------------------------
-            # 5. Build chunk manifest (pure Python, no audio in RAM)
+            # 6. Build chunk manifest — VAD-driven with silence-gap fallback
             # ------------------------------------------------------------------
-            manifest = _build_chunk_manifest(duration_ms, silence_gaps, recording_id)
+            manifest = _build_chunk_manifest(
+                duration_ms, silence_gaps, vad_segments, recording_id,
+            )
 
             # ------------------------------------------------------------------
-            # 6. Split chunks on disk + upload immediately (ffmpeg seek+cut)
+            # 7. Split chunks on disk + upload immediately (ffmpeg seek+cut)
             #    For short recordings (needs_chunking=False), also upload the
             #    full preprocessed audio for the transcription fast path.
             # ------------------------------------------------------------------
@@ -641,7 +765,7 @@ def preprocess_audio(recording_id: str) -> str:
                 logger.info("[%s] Uploaded full preprocessed audio: %s", recording_id, audio_key)
 
             # ------------------------------------------------------------------
-            # 7. Persist manifest to DB + storage
+            # 8. Persist manifest to DB + storage
             # ------------------------------------------------------------------
             _store_chunk_manifest_sync(recording_id, manifest)
             manifest_key = f"preprocessed/{recording_id}/manifest.json"

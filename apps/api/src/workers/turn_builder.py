@@ -78,10 +78,9 @@ def build_conversation_turns(recording_id: str) -> str:
     - Speaker continuity (same speaker = same turn)
     - Gap detection (gap > 1s = new turn)
     
-    NOTE: When diarization is disabled (enable_diarization=False), all words
-    will have speaker_label='UNKNOWN'. The turn builder will still create turns
-    based on gap detection only, which is useful for transcription analysis
-    without speaker identification.
+    Speaker labels come from STT diarization (Deepgram built-in diarizer
+    provides \"SPEAKER_0\", \"SPEAKER_1\", etc.) or fall back to \"UNKNOWN\"
+    if no diarization was performed.
 
     Returns:
         recording_id for the next pipeline stage
@@ -105,8 +104,8 @@ def build_conversation_turns(recording_id: str) -> str:
         from src.config import settings
         if not settings.enable_diarization:
             logger.info(
-                "[%s] Diarization disabled — turns will be based on gap detection only "
-                "(all speaker_label='UNKNOWN')",
+                "[%s] Pyannote diarization disabled — using STT-level speaker labels "
+                "from Deepgram built-in diarizer",
                 recording_id,
             )
 

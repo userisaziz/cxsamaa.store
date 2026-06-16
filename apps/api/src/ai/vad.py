@@ -218,3 +218,63 @@ def vad_filter_audio(audio_bytes: bytes) -> tuple[bytes, list[dict]]:
         )
 
     return filtered, speech_segments
+
+
+def detect_speech_segments_from_file(file_path: str) -> list[dict[str, float]]:
+    """Detect speech-active regions from an audio file on disk.
+
+    Optimized for preprocessing: reads directly from disk via torchaudio,
+    avoiding the bytes → tempfile → torchaudio round-trip.
+
+    Args:
+        file_path: Path to 16kHz mono WAV file
+
+    Returns:
+        List of speech segments: [{"start": 0.0, "end": 12.5}, ...]
+        Returns empty list if VAD is disabled or fails.
+    """
+    model, utils = _get_silero_vad_model()
+    if model is None or utils is None:
+        logger.warning("Silero VAD not available — returning empty speech segments")
+        return []
+
+    (get_speech_timestamps, _save_audio, _read_audio, _VADIterator, _collect_chunks) = utils
+
+    try:
+        wav, sr = torchaudio.load(file_path)
+
+        if sr != 16000:
+            logger.warning("Audio sample rate is %dHz, expected 16000Hz. Resampling...", sr)
+            wav = torchaudio.functional.resample(wav, sr, 16000)
+            sr = 16000
+
+        if wav.shape[0] > 1:
+            wav = wav.mean(dim=0, keepdim=True)
+
+        speech_timestamps = get_speech_timestamps(
+            wav,
+            model,
+            threshold=settings.vad_threshold,
+            min_speech_duration_ms=settings.vad_min_speech_duration_ms,
+            max_speech_duration_s=float("inf"),
+            min_silence_duration_ms=settings.vad_min_silence_duration_ms,
+            sampling_rate=sr,
+        )
+
+        segments = []
+        for ts in speech_timestamps:
+            segments.append({
+                "start": round(ts["start"] / sr, 3),
+                "end": round(ts["end"] / sr, 3),
+            })
+
+        logger.info(
+            "Silero VAD detected %d speech segments (%.1fs total)",
+            len(segments),
+            segments[-1]["end"] if segments else 0,
+        )
+        return segments
+
+    except Exception as e:
+        logger.error("Silero VAD file detection failed: %s", e)
+        return []
