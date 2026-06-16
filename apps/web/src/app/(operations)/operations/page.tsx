@@ -25,7 +25,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Upload, CheckCircle, XCircle, Loader2, FileAudio, Clock, Mic, Inbox, Activity, Zap, Trash2 } from "lucide-react";
 import { PipelineStepper } from "@/components/pipeline-stepper";
 import { PipelineActionButtons } from "@/components/pipeline-action-buttons";
-import type { Brand, Store, Salesperson, Recording } from "@samaa/shared";
+import type { Recording } from "@samaa/shared";
 
 interface UploadItem {
   id: string; // Unique ID for state updates
@@ -76,35 +76,40 @@ export default function OperationsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Fetch brands
+  // Fetch complete hierarchy in single call
   const {
-    data: brands = [],
-    isLoading: brandsLoading,
-    error: brandsError,
+    data: hierarchyData,
+    isLoading: hierarchyLoading,
+    error: hierarchyError,
   } = useQuery({
-    queryKey: ["brands"],
-    queryFn: () => api.get<Brand[]>("/brands"),
+    queryKey: ["hierarchy"],
+    queryFn: () => api.get<{
+      brands: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        stores: Array<{
+          id: string;
+          name: string;
+          location: string | null;
+          salespeople: Array<{
+            id: string;
+            name: string;
+            device_number: string | null;
+          }>;
+        }>;
+      }>;
+    }>("/hierarchy"),
   });
 
-  // Fetch stores (filtered by brand)
-  const { data: stores = [] } = useQuery({
-    queryKey: ["stores", selectedBrandId],
-    queryFn: () =>
-      api.get<Store[]>(
-        `/stores${selectedBrandId ? `?brand_id=${selectedBrandId}` : ""}`
-      ),
-    enabled: !!selectedBrandId,
-  });
-
-  // Fetch salespeople (filtered by store)
-  const { data: salespeople = [] } = useQuery({
-    queryKey: ["salespeople", selectedStoreId],
-    queryFn: () =>
-      api.get<Salesperson[]>(
-        `/salespeople${selectedStoreId ? `?store_id=${selectedStoreId}` : ""}`
-      ),
-    enabled: !!selectedStoreId,
-  });
+  // Extract flat lists from hierarchy for compatibility with existing logic
+  const brands = hierarchyData?.brands ?? [];
+  const stores = selectedBrandId 
+    ? (brands.find(b => b.id === selectedBrandId)?.stores ?? [])
+    : [];
+  const salespeople = selectedStoreId
+    ? (stores.find(s => s.id === selectedStoreId)?.salespeople ?? [])
+    : [];
 
   // Fetch today's recordings
   const todayStr = new Date().toISOString().split("T")[0];
@@ -150,7 +155,7 @@ export default function OperationsPage() {
   }, [selectedStoreId]);
 
   const selectedSalesperson = salespeople.find(
-    (s: Salesperson) => s.id === selectedSalespersonId
+    (s) => s.id === selectedSalespersonId
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -466,16 +471,16 @@ export default function OperationsPage() {
                 <Select
                   value={selectedBrandId}
                   onValueChange={(v) => v && setSelectedBrandId(v)}
-                  disabled={brandsLoading}
-                  items={brands.map((b: Brand) => ({ label: b.name, value: b.id }))}
+                  disabled={hierarchyLoading}
+                  items={brands.map((b) => ({ label: b.name, value: b.id }))}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue
                       placeholder={
-                        brandsLoading
+                        hierarchyLoading
                           ? "Loading..."
-                          : brandsError
-                            ? "Error loading brands"
+                          : hierarchyError
+                            ? "Error loading hierarchy"
                             : brands.length === 0
                               ? "No brands found"
                               : "Select brand"
@@ -483,16 +488,16 @@ export default function OperationsPage() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {brands.map((b: Brand) => (
+                    {brands.map((b) => (
                       <SelectItem key={b.id} value={b.id}>
                         {b.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {brandsError && (
+                {hierarchyError && (
                   <p className="text-xs text-destructive">
-                    Failed to load brands: {brandsError.message}
+                    Failed to load hierarchy: {hierarchyError.message}
                   </p>
                 )}
               </div>
@@ -503,7 +508,7 @@ export default function OperationsPage() {
                   value={selectedStoreId}
                   onValueChange={(v) => v && setSelectedStoreId(v)}
                   disabled={!selectedBrandId}
-                  items={stores.map((s: Store) => ({ label: s.name, value: s.id }))}
+                  items={stores.map((s) => ({ label: s.name, value: s.id }))}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue
@@ -513,7 +518,7 @@ export default function OperationsPage() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {stores.map((s: Store) => (
+                    {stores.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
                       </SelectItem>
@@ -528,7 +533,7 @@ export default function OperationsPage() {
                   value={selectedSalespersonId}
                   onValueChange={(v) => v && setSelectedSalespersonId(v)}
                   disabled={!selectedStoreId}
-                  items={salespeople.map((s: Salesperson) => ({ label: `${s.name}${s.device_number ? ` (#${s.device_number})` : ""}`, value: s.id }))}
+                  items={salespeople.map((s) => ({ label: `${s.name}${s.device_number ? ` (#${s.device_number})` : ""}`, value: s.id }))}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue
@@ -540,7 +545,7 @@ export default function OperationsPage() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {salespeople.map((s: Salesperson) => (
+                    {salespeople.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
                         {s.device_number ? ` (#${s.device_number})` : ""}
