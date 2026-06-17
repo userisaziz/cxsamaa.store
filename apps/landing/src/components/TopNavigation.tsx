@@ -256,19 +256,8 @@ const TopNavigation: React.FC = () => {
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (isHome) {
-                  const target = document.querySelector('#contact');
-                  if (target) {
-                    const offset = 80;
-                    const top = target.getBoundingClientRect().top + window.scrollY - offset;
-                    window.scrollTo({ top, behavior: 'smooth' });
-                  }
-                } else {
-                  navigate('/company/contact');
-                }
-              }}
+            <a
+              href="mailto:azizadnan370@gmail.com"
               className={`text-body-sm-medium px-3 py-2 rounded-md transition-colors ${
                 isDark && isHome
                   ? 'text-on-dark-muted hover:text-white hover:bg-white/5'
@@ -276,7 +265,7 @@ const TopNavigation: React.FC = () => {
               }`}
             >
               Talk to sales
-            </button>
+            </a>
             <button className="btn-accent">Get Started</button>
           </div>
 
@@ -349,22 +338,12 @@ const TopNavigation: React.FC = () => {
               })}
             </nav>
             <div className="mt-6 pt-6 border-t border-hairline flex flex-col gap-3">
-              <button
-                onClick={() => {
-                  closeMobile();
-                  setTimeout(() => {
-                    if (isHome) {
-                      const target = document.querySelector('#contact');
-                      if (target) target.scrollIntoView({ behavior: 'smooth' });
-                    } else {
-                      navigate('/company/contact');
-                    }
-                  }, 350);
-                }}
-                className="btn-secondary w-full"
+              <a
+                href="mailto:azizadnan370@gmail.com"
+                className="btn-secondary w-full text-center"
               >
                 Talk to sales
-              </button>
+              </a>
               <button
                 onClick={() => {
                   closeMobile();
