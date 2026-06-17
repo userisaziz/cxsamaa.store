@@ -27,8 +27,6 @@ steps:
 
   # Write .env.prod files from Secret Manager (files are gitignored, so we create them at build time)
   # MUST happen BEFORE Docker builds so NEXT_PUBLIC_API_URL is baked into the JS bundle
-  # Convert KEY=VALUE format to YAML (key: "value") for gcloud run deploy --env-vars-file
-  # Override API_BASE_URL with actual Cloud Run API URL for production rewrites
   # Override NEXT_PUBLIC_API_URL with custom domain for direct API calls
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -36,22 +34,13 @@ steps:
       - '-c'
       - |
         mkdir -p apps/api apps/web && \
-        printf '%s\n' "$$API_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$$/d' > apps/api/.env.prod && \
-        printf '%s\n' "$$WEB_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$$/d' > apps/web/.env.prod && \
-        API_URL=$$(gcloud run services describe samaa-api --region=${_REGION} --format="value(status.url)") && \
-        echo "API_URL detected: $${API_URL}" && \
-        if grep -q "API_BASE_URL" apps/web/.env.prod; then \
-          sed -i "s|API_BASE_URL:.*|API_BASE_URL: \"$${API_URL}\"|g" apps/web/.env.prod; \
-          echo "Updated existing API_BASE_URL"; \
-        else \
-          echo "API_BASE_URL: \"$${API_URL}\"" >> apps/web/.env.prod; \
-          echo "Added new API_BASE_URL"; \
-        fi && \
+        printf '%s\n' "$$API_ENV_PROD" > apps/api/.env.prod && \
+        printf '%s\n' "$$WEB_ENV_PROD" > apps/web/.env.prod && \
         if grep -q "NEXT_PUBLIC_API_URL" apps/web/.env.prod; then \
-          sed -i "s|NEXT_PUBLIC_API_URL:.*|NEXT_PUBLIC_API_URL: \"https://api.cxsamaa.store/api/v1\"|g" apps/web/.env.prod; \
+          sed -i "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1|g" apps/web/.env.prod; \
           echo "Updated NEXT_PUBLIC_API_URL"; \
         else \
-          echo "NEXT_PUBLIC_API_URL: \"https://api.cxsamaa.store/api/v1\"" >> apps/web/.env.prod; \
+          echo "NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1" >> apps/web/.env.prod; \
           echo "Added NEXT_PUBLIC_API_URL for direct API calls"; \
         fi && \
         echo "Final web .env.prod contents:" && cat apps/web/.env.prod
