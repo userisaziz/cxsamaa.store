@@ -106,7 +106,8 @@ steps:
           -f apps/landing/Dockerfile \
           . && \
         docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}
-    waitFor: ['auth-docker']
+    waitFor:
+      - write-env-files
     id: 'build-push-landing'
 
   # Deploy API to Cloud Run
@@ -129,7 +130,8 @@ steps:
       - '--env-vars-file=apps/api/.env.prod.yaml'
       # Note: --allow-unauthenticated removed due to org policy iam.allowedPolicyMemberDomains
       # Services are domain-restricted to marsatijarah.com. Access via custom domains or IAM.
-    waitFor: ['write-env-files']
+    waitFor:
+      - build-push-api
     id: 'deploy-api'
 
   # Deploy Frontend to Cloud Run
@@ -152,7 +154,8 @@ steps:
       - '--env-vars-file=apps/web/.env.prod.yaml'
       # Note: --allow-unauthenticated removed due to org policy iam.allowedPolicyMemberDomains
       # Services are domain-restricted to marsatijarah.com. Access via custom domains or IAM.
-    waitFor: ['write-env-files']
+    waitFor:
+      - build-push-web
     id: 'deploy-web'
 
   # Deploy Landing Page to Cloud Run
