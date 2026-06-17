@@ -1,0 +1,44 @@
+# cloudbuild-landing.yaml — Build and deploy samaa-landing (Vite + React)
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'sh'
+    args: ['-c', 'gcloud auth configure-docker us-central1-docker.pkg.dev --quiet']
+    id: 'auth-docker'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG} \
+          -f apps/landing/Dockerfile . && \
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}
+    waitFor: ['auth-docker']
+    id: 'build-push'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'samaa-landing'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--port=8080'
+      - '--cpu=1'
+      - '--memory=256Mi'
+      - '--min-instances=0'
+      - '--max-instances=3'
+      - '--concurrency=100'
+      - '--timeout=30'
+    waitFor: ['build-push']
+    id: 'deploy'
+
+substitutions:
+  _TAG: 'latest'
+  _REGION: 'us-central1'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'

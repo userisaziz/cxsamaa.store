@@ -1,23 +1,13 @@
-# deploy-gcp.yml — Deploy 2 services to GCP Cloud Run
+# deploy-gcp.yml — Selective deploy to GCP Cloud Run
 #
-# Triggers: push to main
-# Auth:     Workload Identity Federation (no keys!)
-# Build:    Cloud Build via cloudbuild.yaml
-# Services: samaa-api (FastAPI) + samaa-web (Next.js)
+# Only rebuilds and redeploys services whose code actually changed.
+# Auth: Workload Identity Federation (no service account keys).
 name: Deploy to GCP Cloud Run
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'apps/api/**'
-      - 'apps/web/**'
-      - 'apps/landing/**'
-      - 'packages/shared/**'
-      - 'cloudbuild.yaml'
-      - '.github/workflows/deploy-gcp.yml'
 
-# Required for Workload Identity Federation
 permissions:
   id-token: write
   contents: read
@@ -30,151 +20,141 @@ env:
   REGION: us-central1
 
 jobs:
-  # ── Pre-flight ───────────────────────────────────────────────────
-  validate:
+  # ── Detect which apps changed ────────────────────────────────────
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web || steps.filter.outputs.shared }}
+      landing: ${{ steps.filter.outputs.landing || steps.filter.outputs.shared }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+            landing:
+              - 'apps/landing/**'
+            shared:
+              - 'packages/shared/**'
+            config:
+              - 'cloudbuild-*.yaml'
+              - '.github/workflows/deploy-gcp.yml'
 
-      - name: Pre-flight checks
-        run: |
-          echo "=== Pre-flight ==="
-          echo "  Branch:  ${{ github.ref_name }}"
-          echo "  Commit:  ${{ github.sha }}"
-          echo "  Author:  ${{ github.actor }}"
-          for f in apps/api/pyproject.toml apps/web/package.json apps/landing/package.json cloudbuild.yaml; do
-            [ -f "$f" ] || { echo "::error::Missing: $f"; exit 1; }
-          done
-          echo "  All required files present"
-
-  # ── Deploy ────────────────────────────────────────────────────────
+  # ── Deploy changed services ──────────────────────────────────────
   deploy:
-    needs: validate
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.landing == 'true'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ── Authenticate to GCP ──────────────────────────────────────
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+      - run: gcloud auth configure-docker --quiet
 
-      # ── Submit to Cloud Build ────────────────────────────────────
-      - name: Submit Cloud Build
+      # ── API ──────────────────────────────────────────────────────
+      - name: Deploy API
+        if: needs.changes.outputs.api == 'true'
         run: |
           gcloud builds submit \
-            --config=cloudbuild.yaml \
+            --config=cloudbuild-api.yaml \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --substitutions=_TAG=${{ github.sha }} \
-            --timeout=1800
+            --timeout=1200
 
-      # ── Health checks (service readiness, not HTTP) ──────────────
-      # Services are domain-restricted, so HTTP checks fail from GitHub Actions
-      # Instead we verify the service is in READY state
-      - name: Health check — API readiness
+      # ── Web ──────────────────────────────────────────────────────
+      - name: Deploy Web
+        if: needs.changes.outputs.web == 'true'
         run: |
-          API_URL=$(gcloud run services describe samaa-api \
-            --region=${{ env.REGION }} \
+          gcloud builds submit \
+            --config=cloudbuild-web.yaml \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.url)')
-          echo "  API URL: ${API_URL}"
+            --substitutions=_TAG=${{ github.sha }} \
+            --timeout=1200
 
-          # Retry readiness check (service may still be rolling out)
+      # ── Landing ──────────────────────────────────────────────────
+      - name: Deploy Landing
+        if: needs.changes.outputs.landing == 'true'
+        run: |
+          gcloud builds submit \
+            --config=cloudbuild-landing.yaml \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --substitutions=_TAG=${{ github.sha }} \
+            --timeout=900
+
+  # ── Health checks ────────────────────────────────────────────────
+  health-check:
+    needs: [changes, deploy]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: samaa-api
+            deploy: ${{ needs.changes.outputs.api }}
+          - service: samaa-web
+            deploy: ${{ needs.changes.outputs.web }}
+          - service: samaa-landing
+            deploy: ${{ needs.changes.outputs.landing }}
+    steps:
+      - uses: google-github-actions/auth@v2
+        if: matrix.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: matrix.deploy == 'true'
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Check readiness — ${{ matrix.service }}
+        if: matrix.deploy == 'true'
+        run: |
           for i in 1 2 3 4 5; do
-            READY=$(gcloud run services describe samaa-api \
+            READY=$(gcloud run services describe ${{ matrix.service }} \
               --region=${{ env.REGION }} \
               --project=${{ secrets.GCP_PROJECT_ID }} \
               --format='value(status.latestReadyRevisionName)')
-            
             if [ -n "${READY}" ]; then
-              echo "  API status: READY (revision: ${READY})"
+              echo "${{ matrix.service }}: READY (${READY})"
               exit 0
             fi
-            echo "  Attempt ${i}/5: not ready yet, waiting 15s..."
+            echo "Attempt ${i}/5: not ready, waiting 15s..."
             sleep 15
           done
-          
-          echo "::error::API did not become ready after 75s"
-          exit 1
+          echo "::warning::${{ matrix.service }} did not become ready after 75s"
 
-      - name: Health check — Web readiness
-        run: |
-          WEB_URL=$(gcloud run services describe samaa-web \
-            --region=${{ env.REGION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.url)')
-          echo "  Web URL: ${WEB_URL}"
-
-          # Retry readiness check
-          for i in 1 2 3 4 5; do
-            READY=$(gcloud run services describe samaa-web \
-              --region=${{ env.REGION }} \
-              --project=${{ secrets.GCP_PROJECT_ID }} \
-              --format='value(status.latestReadyRevisionName)')
-            
-            if [ -n "${READY}" ]; then
-              echo "  Web status: READY (revision: ${READY})"
-              exit 0
-            fi
-            echo "  Attempt ${i}/5: not ready yet, waiting 15s..."
-            sleep 15
-          done
-          
-          echo "::warning::Web did not become ready after 75s"
-
-      - name: Health check — Landing readiness
-        run: |
-          LANDING_URL=$(gcloud run services describe samaa-landing \
-            --region=${{ env.REGION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.url)')
-          echo "  Landing URL: ${LANDING_URL}"
-
-          # Retry readiness check
-          for i in 1 2 3 4 5; do
-            READY=$(gcloud run services describe samaa-landing \
-              --region=${{ env.REGION }} \
-              --project=${{ secrets.GCP_PROJECT_ID }} \
-              --format='value(status.latestReadyRevisionName)')
-            
-            if [ -n "${READY}" ]; then
-              echo "  Landing status: READY (revision: ${READY})"
-              exit 0
-            fi
-            echo "  Attempt ${i}/5: not ready yet, waiting 15s..."
-            sleep 15
-          done
-          
-          echo "::warning::Landing did not become ready after 75s"
-
-      # ── Summary ──────────────────────────────────────────────────
-      - name: Deploy summary
-        if: always()
-        run: |
+  # ── Summary ──────────────────────────────────────────────────────
+  summary:
+    needs: [changes, deploy, health-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
           echo "════════════════════════════════════════"
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "  Deployment Successful"
-            echo "════════════════════════════════════════"
-            echo ""
-            echo "  Commit:  ${{ github.sha }}"
-            echo "  Author:  ${{ github.actor }}"
-          else
-            echo "  Deployment Failed"
-            echo "════════════════════════════════════════"
-            echo "  Commit: ${{ github.sha }}"
-          fi
+          echo "  Deploy Summary"
+          echo "════════════════════════════════════════"
+          echo "  Commit:  ${{ github.sha }}"
+          echo "  Author:  ${{ github.actor }}"
+          echo "  API:     ${{ needs.changes.outputs.api == 'true' && 'deployed' || 'skipped' }}"
+          echo "  Web:     ${{ needs.changes.outputs.web == 'true' && 'deployed' || 'skipped' }}"
+          echo "  Landing: ${{ needs.changes.outputs.landing == 'true' && 'deployed' || 'skipped' }}"
+          echo "  Status:  ${{ needs.deploy.result }}"
+          echo "════════════════════════════════════════"
