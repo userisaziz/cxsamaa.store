@@ -69,7 +69,6 @@ steps:
       - '--max-instances=5'
       - '--concurrency=50'
       - '--timeout=300'
-      - '--set-env-vars=APP_ENV=production,APP_DEBUG=false,PIPELINE_MODE=cloud-only'
       - '--env-vars-file=apps/api/.env.prod'
       - '--allow-unauthenticated'
     waitFor: ['write-env-files']
@@ -92,7 +91,6 @@ steps:
       - '--max-instances=5'
       - '--concurrency=80'
       - '--timeout=60'
-      - '--set-env-vars=NEXT_PUBLIC_API_URL=/api/v1'
       - '--env-vars-file=apps/web/.env.prod'
       - '--allow-unauthenticated'
     waitFor: ['write-env-files']
@@ -109,7 +107,6 @@ steps:
       - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--args=alembic,upgrade,head'
-      - '--set-env-vars=APP_ENV=production'
       - '--env-vars-file=apps/api/.env.prod'
     waitFor: ['deploy-api']
     id: 'migrate-db'
