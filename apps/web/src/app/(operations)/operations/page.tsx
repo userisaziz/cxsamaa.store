@@ -381,7 +381,7 @@ export default function OperationsPage() {
     }
 
     try {
-      const response = await api.post(`/recordings/${recordingId}/re-upload`);
+      const response = await api.post<{ upload_url: string; file_key: string }>(`/recordings/${recordingId}/re-upload`);
       const { upload_url, file_key } = response;
 
       toast.info("Upload URL generated", {
