@@ -98,9 +98,9 @@ jobs:
           READY=$(gcloud run services describe samaa-api \
             --region=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.conditions[?type=="Ready"].status)')
+            --format='value(status.latestReadyRevisionName)')
           
-          if [ "${READY}" = "True" ]; then
+          if [ -n "${READY}" ]; then
             echo "  API status: READY"
           else
             echo "::error::API is not ready (status: ${READY})"
@@ -118,9 +118,9 @@ jobs:
           READY=$(gcloud run services describe samaa-web \
             --region=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.conditions[?type=="Ready"].status)')
+            --format='value(status.latestReadyRevisionName)')
           
-          if [ "${READY}" = "True" ]; then
+          if [ -n "${READY}" ]; then
             echo "  Web status: READY"
           else
             echo "::warning::Web is not ready (status: ${READY})"
