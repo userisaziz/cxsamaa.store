@@ -17,10 +17,10 @@ steps:
     args:
       - '-c'
       - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG} \
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG} \
           -f Dockerfile \
           . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}
     dir: 'apps/api'
     waitFor: ['auth-docker']
     id: 'build-push-api'
@@ -31,15 +31,16 @@ steps:
     args:
       - '-c'
       - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG} \
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG} \
           -f apps/web/Dockerfile \
           . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG}
     waitFor: ['auth-docker']
     id: 'build-push-web'
 
   # Write .env.prod files from Secret Manager (files are gitignored, so we create them at build time)
   # Convert KEY=VALUE format to YAML (key: "value") for gcloud run deploy --env-vars-file
+  # Override API_BASE_URL with actual Cloud Run API URL for production rewrites
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
@@ -47,7 +48,9 @@ steps:
       - |
         mkdir -p apps/api apps/web && \
         printf '%s\n' "$$API_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$/d' > apps/api/.env.prod && \
-        printf '%s\n' "$$WEB_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$/d' > apps/web/.env.prod
+        printf '%s\n' "$$WEB_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$/d' > apps/web/.env.prod && \
+        API_URL=$$(gcloud run services describe samaa-api --region=${_REGION} --format="value(status.url)") && \
+        sed -i "s|API_BASE_URL:.*|API_BASE_URL: \"$${API_URL}\"|g" apps/web/.env.prod
     secretEnv: ['API_ENV_PROD', 'WEB_ENV_PROD']
     waitFor: ['build-push-api', 'build-push-web']
     id: 'write-env-files'
@@ -59,7 +62,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'samaa-api'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--port=8000'
@@ -70,7 +73,8 @@ steps:
       - '--concurrency=50'
       - '--timeout=300'
       - '--env-vars-file=apps/api/.env.prod'
-      - '--allow-unauthenticated'
+      # Note: --allow-unauthenticated removed due to org policy iam.allowedPolicyMemberDomains
+      # Services are domain-restricted to marsatijarah.com. Access via custom domains or IAM.
     waitFor: ['write-env-files']
     id: 'deploy-api'
 
@@ -81,7 +85,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'samaa-web'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG}'
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--port=3000'
@@ -92,7 +96,8 @@ steps:
       - '--concurrency=80'
       - '--timeout=60'
       - '--env-vars-file=apps/web/.env.prod'
-      - '--allow-unauthenticated'
+      # Note: --allow-unauthenticated removed due to org policy iam.allowedPolicyMemberDomains
+      # Services are domain-restricted to marsatijarah.com. Access via custom domains or IAM.
     waitFor: ['write-env-files']
     id: 'deploy-web'
 
@@ -104,7 +109,7 @@ steps:
       - 'jobs'
       - 'deploy'
       - 'samaa-migrations'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--args=alembic,upgrade,head'
       - '--env-vars-file=apps/api/.env.prod'

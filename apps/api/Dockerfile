@@ -25,5 +25,5 @@ EXPOSE 8000
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Run the API server
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the API server with env file from /secrets
+CMD ["/bin/sh", "-c", "if [ -f /secrets/.env.prod ]; then set -a && . /secrets/.env.prod && set +a; fi && uvicorn src.main:app --host 0.0.0.0 --port 8000"]

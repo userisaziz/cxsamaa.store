@@ -155,7 +155,8 @@ echo ""
 echo -e "${YELLOW}[7/8] Deploying Frontend service...${NC}"
 
 # Update frontend .env.prod with API URL
-sed -i.bak "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=${API_URL}|g" apps/web/.env.prod
+sed -i.bak "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=/api/v1|g" apps/web/.env.prod
+sed -i.bak "s|API_BASE_URL=.*|API_BASE_URL=${API_URL}|g" apps/web/.env.prod
 
 gcloud run deploy samaa-web \
   --image="gcr.io/${GCP_PROJECT}/samaa-web:${TAG}" \
