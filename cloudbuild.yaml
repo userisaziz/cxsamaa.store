@@ -34,20 +34,52 @@ steps:
     args:
       - '-c'
       - |
-        mkdir -p apps/api apps/web && \
-        printf '%s\n' "$$API_ENV_PROD" > apps/api/.env.prod && \
-        printf '%s\n' "$$WEB_ENV_PROD" > apps/web/.env.prod && \
-        if grep -q "NEXT_PUBLIC_API_URL" apps/web/.env.prod; then \
-          sed -i "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1|g" apps/web/.env.prod; \
-        else \
-          echo "NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1" >> apps/web/.env.prod; \
-        fi && \
-        cat apps/api/.env.prod | awk -F= 'NF && $$1 {print $$1 ": \"" $$2 "\""}' > apps/api/.env.prod.yaml && \
-        cat apps/web/.env.prod | awk -F= 'NF && $$1 {print $$1 ": \"" $$2 "\""}' > apps/web/.env.prod.yaml && \
-        echo "API YAML env:" && cat apps/api/.env.prod.yaml && \
-        echo "Web YAML env:" && cat apps/web/.env.prod.yaml
-    secretEnv: ['API_ENV_PROD', 'WEB_ENV_PROD']
-    waitFor: ['auth-docker']
+        set -e
+
+        mkdir -p apps/api apps/web
+
+        printf '%s\n' "$$API_ENV_PROD" > apps/api/.env.prod
+        printf '%s\n' "$$WEB_ENV_PROD" > apps/web/.env.prod
+
+        if grep -q "^NEXT_PUBLIC_API_URL=" apps/web/.env.prod; then
+          sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1|g' apps/web/.env.prod
+        else
+          echo "NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1" >> apps/web/.env.prod
+        fi
+
+        grep -v '^[[:space:]]*$' apps/api/.env.prod | grep -v '^#' > /tmp/api.env
+        grep -v '^[[:space:]]*$' apps/web/.env.prod | grep -v '^#' > /tmp/web.env
+
+        awk -F= '
+        {
+          i = index($$0, "=")
+          if (i == 0) next
+          key = substr($$0, 1, i-1)
+          val = substr($$0, i+1)
+          gsub(/"/, "\\\"", val)
+          print key ": \"" val "\""
+        }' /tmp/api.env > apps/api/.env.prod.yaml
+
+        awk -F= '
+        {
+          i = index($$0, "=")
+          if (i == 0) next
+          key = substr($$0, 1, i-1)
+          val = substr($$0, i+1)
+          gsub(/"/, "\\\"", val)
+          print key ": \"" val "\""
+        }' /tmp/web.env > apps/web/.env.prod.yaml
+
+        echo "========== API YAML =========="
+        cat apps/api/.env.prod.yaml
+
+        echo "========== WEB YAML =========="
+        cat apps/web/.env.prod.yaml
+    secretEnv:
+      - API_ENV_PROD
+      - WEB_ENV_PROD
+    waitFor:
+      - auth-docker
     id: 'write-env-files'
 
   # Build and Push Frontend image
