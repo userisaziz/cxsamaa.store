@@ -94,18 +94,23 @@ jobs:
             --format='value(status.url)')
           echo "  API URL: ${API_URL}"
 
-          # Check service is ready (domain-restricted, so HTTP will 403)
-          READY=$(gcloud run services describe samaa-api \
-            --region=${{ env.REGION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.latestReadyRevisionName)')
+          # Retry readiness check (service may still be rolling out)
+          for i in 1 2 3 4 5; do
+            READY=$(gcloud run services describe samaa-api \
+              --region=${{ env.REGION }} \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --format='value(status.latestReadyRevisionName)')
+            
+            if [ -n "${READY}" ]; then
+              echo "  API status: READY (revision: ${READY})"
+              exit 0
+            fi
+            echo "  Attempt ${i}/5: not ready yet, waiting 15s..."
+            sleep 15
+          done
           
-          if [ -n "${READY}" ]; then
-            echo "  API status: READY"
-          else
-            echo "::error::API is not ready (status: ${READY})"
-            exit 1
-          fi
+          echo "::error::API did not become ready after 75s"
+          exit 1
 
       - name: Health check — Web readiness
         run: |
@@ -115,16 +120,22 @@ jobs:
             --format='value(status.url)')
           echo "  Web URL: ${WEB_URL}"
 
-          READY=$(gcloud run services describe samaa-web \
-            --region=${{ env.REGION }} \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --format='value(status.latestReadyRevisionName)')
+          # Retry readiness check
+          for i in 1 2 3 4 5; do
+            READY=$(gcloud run services describe samaa-web \
+              --region=${{ env.REGION }} \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --format='value(status.latestReadyRevisionName)')
+            
+            if [ -n "${READY}" ]; then
+              echo "  Web status: READY (revision: ${READY})"
+              exit 0
+            fi
+            echo "  Attempt ${i}/5: not ready yet, waiting 15s..."
+            sleep 15
+          done
           
-          if [ -n "${READY}" ]; then
-            echo "  Web status: READY"
-          else
-            echo "::warning::Web is not ready (status: ${READY})"
-          fi
+          echo "::warning::Web did not become ready after 75s"
 
       # ── Summary ──────────────────────────────────────────────────
       - name: Deploy summary
