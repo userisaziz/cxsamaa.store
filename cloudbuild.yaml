@@ -46,8 +46,8 @@ steps:
       - '-c'
       - |
         mkdir -p apps/api apps/web && \
-        printf '%s\n' "$$API_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' > apps/api/.env.prod && \
-        printf '%s\n' "$$WEB_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' > apps/web/.env.prod
+        printf '%s\n' "$$API_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$/d' > apps/api/.env.prod && \
+        printf '%s\n' "$$WEB_ENV_PROD" | sed 's/=/: "/' | sed 's/$/"/' | sed '/^"$/d' > apps/web/.env.prod
     secretEnv: ['API_ENV_PROD', 'WEB_ENV_PROD']
     waitFor: ['build-push-api', 'build-push-web']
     id: 'write-env-files'
