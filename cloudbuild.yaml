@@ -42,8 +42,8 @@ steps:
         else \
           echo "NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1" >> apps/web/.env.prod; \
         fi && \
-        cat apps/api/.env.prod | awk -F= '{print $$1 ": \"" $$2 "\""}' > apps/api/.env.prod.yaml && \
-        cat apps/web/.env.prod | awk -F= '{print $$1 ": \"" $$2 "\""}' > apps/web/.env.prod.yaml && \
+        cat apps/api/.env.prod | awk -F= 'NF && $$1 {print $$1 ": \"" $$2 "\""}' > apps/api/.env.prod.yaml && \
+        cat apps/web/.env.prod | awk -F= 'NF && $$1 {print $$1 ": \"" $$2 "\""}' > apps/web/.env.prod.yaml && \
         echo "API YAML env:" && cat apps/api/.env.prod.yaml && \
         echo "Web YAML env:" && cat apps/web/.env.prod.yaml
     secretEnv: ['API_ENV_PROD', 'WEB_ENV_PROD']
@@ -94,7 +94,7 @@ steps:
       - '--max-instances=5'
       - '--concurrency=50'
       - '--timeout=300'
-      - '--env-vars-file=apps/api/.env.prod'
+      - '--env-vars-file=apps/api/.env.prod.yaml'
       # Note: --allow-unauthenticated removed due to org policy iam.allowedPolicyMemberDomains
       # Services are domain-restricted to marsatijarah.com. Access via custom domains or IAM.
     waitFor: ['write-env-files']
