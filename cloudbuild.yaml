@@ -157,7 +157,7 @@ steps:
       - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--args=alembic,upgrade,head'
-      - '--env-vars-file=apps/api/.env.prod'
+      - '--env-vars-file=apps/api/.env.prod.yaml'
     waitFor: ['deploy-api']
     id: 'migrate-db'
 
