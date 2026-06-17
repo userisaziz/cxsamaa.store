@@ -17,10 +17,10 @@ steps:
     args:
       - '-c'
       - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG} \
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG} \
           -f Dockerfile \
           . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}
     dir: 'apps/api'
     waitFor: ['auth-docker']
     id: 'build-push-api'
@@ -31,10 +31,10 @@ steps:
     args:
       - '-c'
       - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG} \
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG} \
           -f apps/web/Dockerfile \
           . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG}
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}
     waitFor: ['auth-docker']
     id: 'build-push-web'
 
@@ -44,10 +44,10 @@ steps:
     args:
       - '-c'
       - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-landing:${_TAG} \
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG} \
           -f apps/landing/Dockerfile \
           . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-landing:${_TAG}
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}
     waitFor: ['auth-docker']
     id: 'build-push-landing'
 
@@ -83,7 +83,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'samaa-api'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--port=8000'
@@ -106,7 +106,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'samaa-web'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-web:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}'
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--port=3000'
@@ -129,7 +129,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'samaa-landing'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-landing:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}'
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--port=8080'
@@ -153,7 +153,7 @@ steps:
       - 'jobs'
       - 'deploy'
       - 'samaa-migrations'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-images/samaa-api:${_TAG}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-api:${_TAG}'
       - '--region=${_REGION}'
       - '--args=alembic,upgrade,head'
       - '--env-vars-file=apps/api/.env.prod'
