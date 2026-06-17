@@ -25,33 +25,8 @@ steps:
     waitFor: ['auth-docker']
     id: 'build-push-api'
 
-  # Build and Push Frontend image
-  - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG} \
-          -f apps/web/Dockerfile \
-          . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}
-    waitFor: ['auth-docker']
-    id: 'build-push-web'
-
-  # Build and Push Landing Page image
-  - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG} \
-          -f apps/landing/Dockerfile \
-          . && \
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}
-    waitFor: ['auth-docker']
-    id: 'build-push-landing'
-
   # Write .env.prod files from Secret Manager (files are gitignored, so we create them at build time)
+  # MUST happen BEFORE Docker builds so NEXT_PUBLIC_API_URL is baked into the JS bundle
   # Convert KEY=VALUE format to YAML (key: "value") for gcloud run deploy --env-vars-file
   # Override API_BASE_URL with actual Cloud Run API URL for production rewrites
   # Override NEXT_PUBLIC_API_URL with custom domain for direct API calls
@@ -81,8 +56,35 @@ steps:
         fi && \
         echo "Final web .env.prod contents:" && cat apps/web/.env.prod
     secretEnv: ['API_ENV_PROD', 'WEB_ENV_PROD']
-    waitFor: ['build-push-api', 'build-push-web']
+    waitFor: ['auth-docker']
     id: 'write-env-files'
+
+  # Build and Push Frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG} \
+          -f apps/web/Dockerfile \
+          --build-arg NEXT_PUBLIC_API_URL=https://api.cxsamaa.store/api/v1 \
+          . && \
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-web:${_TAG}
+    waitFor: ['write-env-files']
+    id: 'build-push-web'
+
+  # Build and Push Landing Page image
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG} \
+          -f apps/landing/Dockerfile \
+          . && \
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/samaa-registry/samaa-landing:${_TAG}
+    waitFor: ['auth-docker']
+    id: 'build-push-landing'
 
   # Deploy API to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
