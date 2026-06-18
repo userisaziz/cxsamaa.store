@@ -152,13 +152,28 @@ export default function StoreDashboardPage() {
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Breadcrumbs */}
+      {storeLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-32" />
+        </div>
+      ) : (
       <Breadcrumbs
         items={[
           { label: store?.name || "Store" },
         ]}
       />
+      )}
 
       {/* Store Header */}
+      {storeLoading ? (
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-border pb-4 sm:pb-6">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <Skeleton className="h-10 w-48" />
+        </div>
+      ) : (
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-border pb-4 sm:pb-6">
         <div>
           <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">{store?.name || "Store"}</h1>
@@ -166,6 +181,7 @@ export default function StoreDashboardPage() {
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
+      )}
 
       {/* KPI Cards */}
       {storeLoading ? (

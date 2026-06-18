@@ -289,8 +289,8 @@ export default function RecordingDetailPage() {
 
   return (
     <div className="flex flex-col h-full p-4 sm:p-6 lg:p-8">
-      {/* Loading Skeleton */}
-      {recordingLoading && (
+      {recordingLoading ? (
+        /* Loading Skeleton */
         <div className="shrink-0 space-y-6">
           <Skeleton className="h-4 w-48" />
           <div className="space-y-2">
@@ -308,8 +308,8 @@ export default function RecordingDetailPage() {
             </CardContent>
           </Card>
         </div>
-      )}
-
+      ) : (
+        <>
       {/* Header Section - Fixed at top */}
       <div className="shrink-0 space-y-4">
         {/* Breadcrumbs */}
@@ -768,6 +768,8 @@ export default function RecordingDetailPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+        </>
       )}
     </div>
   );

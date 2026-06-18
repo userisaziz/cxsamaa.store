@@ -164,6 +164,15 @@ export default function CoachingPage() {
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       {/* Page Header */}
+      {performanceLoading ? (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4 sm:pb-6">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-10 w-full sm:w-[220px]" />
+        </div>
+      ) : (
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4 sm:pb-6">
         <div>
           <h1 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink leading-tight">Coaching Dashboard</h1>
@@ -191,14 +200,21 @@ export default function CoachingPage() {
           </Select>
         )}
       </div>
+      )}
 
       <Tabs defaultValue="overview">
+        {performanceLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-64" />
+          </div>
+        ) : (
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="30d">30 Days</TabsTrigger>
           <TabsTrigger value="60d">60 Days</TabsTrigger>
           <TabsTrigger value="90d">90 Days</TabsTrigger>
         </TabsList>
+        )}
 
         <TabsContent value="overview" className="space-y-6 mt-4">
           {/* KPI Summary */}
@@ -352,7 +368,29 @@ export default function CoachingPage() {
           </div>
 
           {/* Improvement Areas */}
-          {weakestSkills.length > 0 && (
+          {performanceLoading ? (
+            <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
+              <CardHeader>
+                <Skeleton className="h-5 w-40" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-3 rounded-lg border border-border p-4">
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-5 w-12 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : weakestSkills.length > 0 && (
             <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -389,7 +427,26 @@ export default function CoachingPage() {
           )}
 
           {/* Recommendations */}
-          {recommendations.length > 0 && (
+          {performanceLoading ? (
+            <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
+              <CardHeader>
+                <Skeleton className="h-5 w-36" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-3 rounded-lg border border-brand-tag/15 bg-brand-tag/[0.03] p-4">
+                      <Skeleton className="h-7 w-7 rounded-lg" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : recommendations.length > 0 && (
             <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -421,17 +478,38 @@ export default function CoachingPage() {
           )}
 
           {/* Historical Trend + Deal Closure Gauge */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ScoreTrend
-              data={salespersonAnalytics?.score_trend ?? storeAnalytics?.score_trend ?? []}
-              title="Score Trend"
-            />
-            <ConversionGauge
-              value={performance?.conversion_rate != null ? performance.conversion_rate / 100 : null}
-              title="Deal Closure Rate"
-              label={performance?.total_conversations ? `${performance.total_conversations} conversations` : undefined}
-            />
-          </div>
+          {performanceLoading ? (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
+                <CardHeader>
+                  <Skeleton className="h-5 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[280px] w-full" />
+                </CardContent>
+              </Card>
+              <Card className="shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)]">
+                <CardHeader>
+                  <Skeleton className="h-5 w-40" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[280px] w-full" />
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <ScoreTrend
+                data={salespersonAnalytics?.score_trend ?? storeAnalytics?.score_trend ?? []}
+                title="Score Trend"
+              />
+              <ConversionGauge
+                value={performance?.conversion_rate != null ? performance.conversion_rate / 100 : null}
+                title="Deal Closure Rate"
+                label={performance?.total_conversations ? `${performance.total_conversations} conversations` : undefined}
+              />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="30d" className="mt-4">
