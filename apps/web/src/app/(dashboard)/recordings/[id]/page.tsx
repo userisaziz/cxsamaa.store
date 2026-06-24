@@ -174,19 +174,25 @@ export default function RecordingDetailPage() {
   const analyses =
     analysisQueries.data ?? new Map<string, ConversationAnalysis>();
 
-  // Pre-compute per-conversation transcript segments
+  // Pre-compute per-conversation transcript segments with 0-relative timestamps
+  // Conversation audio starts at 0:00, so we offset segment timestamps by conv.start_time
   const segmentsByConversation = useMemo(() => {
     if (!transcript || !conversations) return new Map<string, TranscriptSegment[]>();
     const map = new Map<string, TranscriptSegment[]>();
     for (const conv of conversations) {
-      map.set(
-        conv.id,
-        transcript.filter(
+      const convSegments = transcript
+        .filter(
           (seg) =>
             seg.start_time < conv.end_time + 1.0 &&  // segment starts before conv ends (+1s tolerance)
             seg.end_time > conv.start_time - 1.0,    // segment ends after conv starts (-1s tolerance)
-        ),
-      );
+        )
+        .map(seg => ({
+          ...seg,
+          // Convert to 0-relative timestamps for conversation audio
+          start_time: Math.max(0, seg.start_time - conv.start_time),
+          end_time: Math.max(0, seg.end_time - conv.start_time),
+        }));
+      map.set(conv.id, convSegments);
     }
     return map;
   }, [transcript, conversations]);

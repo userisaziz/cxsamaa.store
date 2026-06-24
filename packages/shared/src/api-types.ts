@@ -156,10 +156,14 @@ export interface TranscriptSegment {
 export interface Conversation {
   id: string;
   recording_id: string;
+  salesperson_id?: string | null;
   start_time: number;
   end_time: number;
+  duration_seconds: number | null;
   segment_count: number;
   summary: string | null;
+  audio_url: string | null;
+  recorded_at?: string | null;
   created_at: string;
 }
 
@@ -172,6 +176,7 @@ export interface ConversationListItem {
   duration_seconds: number | null;
   segment_count: number;
   summary: string | null;
+  audio_url: string | null;
   recorded_at: string | null;
   created_at: string;
   outcome: string | null;

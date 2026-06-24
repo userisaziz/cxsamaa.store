@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MessageSquare, ChevronLeft, ChevronRight, RefreshCw, Eye, Inbox } from "lucide-react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -217,13 +218,13 @@ export default function ConversationsPage() {
                 </TableHeader>
                 <TableBody>
                   {conversations.map((conv) => {
-                    const recordingLink = `/recordings/${conv.recording_id}?conv=${conv.id}`;
+                    const conversationLink = `/conversations/${conv.id}`;
                     return (
                       <TableRow 
                         key={conv.id} 
                         className="group cursor-pointer hover:bg-accent/50 transition-colors"
                         onClick={() => {
-                          window.location.href = recordingLink;
+                          window.location.href = conversationLink;
                         }}
                       >
                         <TableCell className="text-steel font-mono text-[13px]">
@@ -251,10 +252,12 @@ export default function ConversationsPage() {
                           {conv.summary || "—"}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" className="opacity-70 group-hover:opacity-100 transition-opacity">
-                            <Eye className="mr-1 h-4 w-4" />
-                            View
-                          </Button>
+                          <Link href={conversationLink}>
+                            <Button variant="ghost" size="sm" className="opacity-70 group-hover:opacity-100 transition-opacity">
+                              <Eye className="mr-1 h-4 w-4" />
+                              View
+                            </Button>
+                          </Link>
                         </TableCell>
                       </TableRow>
                     );

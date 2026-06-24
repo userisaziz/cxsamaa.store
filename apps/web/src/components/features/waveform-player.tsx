@@ -99,14 +99,21 @@ export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerPro
         onTimeUpdate?.(time);
       });
 
-      // Load audio directly from URL - MediaElement backend streams it
-      // No need to fetch entire blob into memory
+      // Load audio with authentication
+      // For MediaElement backend, we fetch with auth headers and create a blob URL
       const token = localStorage.getItem("access_token");
-      ws.load(audioUrl, undefined, undefined, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }).catch(() => setError("Failed to load audio"));
+      fetch(audioUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("Failed to load audio");
+          return response.blob();
+        })
+        .then((blob) => {
+          const blobUrl = URL.createObjectURL(blob);
+          ws.load(blobUrl);
+        })
+        .catch(() => setError("Failed to load audio"));
 
       return () => {
         ws.destroy();
