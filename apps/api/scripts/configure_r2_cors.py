@@ -44,11 +44,15 @@ def configure_r2_cors():
                 'AllowedHeaders': ['*'],
                 'AllowedMethods': ['GET', 'PUT', 'HEAD'],
                 'AllowedOrigins': [
-                    'http://localhost:3000',  # Local development
-                    'http://localhost:3001',  # Local development
-                    'http://92.4.87.24',      # Production IP
-                    'http://92.4.87.24:3000', # Production IP with port
-                    'https://*.cxsamaa.store', # Custom domain (wildcard)
+                    'http://localhost:3000',      # Local development
+                    'http://localhost:3001',      # Local development
+                    'http://92.4.87.24',          # Production IP
+                    'http://92.4.87.24:3000',     # Production IP with port
+                    'https://dashboard.cxsamaa.store',  # Production dashboard
+                    'https://app.cxsamaa.store',        # Production web app
+                    'https://cxsamaa.store',            # Production domain (apex)
+                    'https://www.cxsamaa.store',        # Production domain (www)
+                    'https://api.cxsamaa.store',        # Production API domain
                 ],
                 'ExposeHeaders': ['ETag', 'x-amz-request-id', 'x-amz-id-2'],
                 'MaxAgeSeconds': 86400  # 24 hours for better caching
@@ -64,7 +68,7 @@ def configure_r2_cors():
         print("✅ CORS configuration applied successfully!")
         print()
         print("📋 CORS Rules:")
-        print("   - Allowed Origins: localhost, 92.4.87.24, *.cxsamaa.store")
+        print("   - Allowed Origins: localhost, 92.4.87.24, dashboard.cxsamaa.store, + others")
         print("   - Allowed Methods: GET, PUT, HEAD")
         print("   - Allowed Headers: * (all)")
         print("   - Max Age: 3600 seconds (1 hour)")
